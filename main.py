@@ -1,8 +1,15 @@
 import sys
 from pathlib import Path
 import json
+import traceback
 from PySide6.QtGui import QPalette, QColor
-from PySide6.QtCore import Qt
+from PySide6.QtCore import (
+    Qt,
+    QObject,
+    Signal,
+    Slot,
+    QThread,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -29,11 +36,32 @@ from elk_queries import (
     reboot_instance,
     logout_instance,
 )
+
 # ---------- Resource Path Helper ---------- #
 def resource_path(relative_path: str) -> str:
     # When running as a PyInstaller onefile exe, files live under sys._MEIPASS
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return str(base / relative_path)
+
+class Worker(QObject):
+    finished = Signal()
+    result = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    @Slot()
+    def run(self):
+        try:
+            out = self.fn()
+            # ensure we always emit a string
+            self.result.emit(out if isinstance(out, str) else str(out))
+        except Exception:
+            self.error.emit(traceback.format_exc())
+        finally:
+            self.finished.emit()
 
 class App(QWidget):
     def __init__(self):
@@ -127,6 +155,56 @@ class App(QWidget):
 
         self.setLayout(root)
 
+    @Slot(str)
+    def _on_worker_result(self, text: str):
+        self.output.setPlainText(self._pretty_print(text))
+
+    @Slot(str)
+    def _on_worker_error(self, err: str):
+        self.output.setPlainText("❌ Error:\n" + err)
+
+    def _run_async(self, status_text: str, fn):
+        self._set_status(status_text)
+
+        # Keep a list so multiple clicks don't overwrite previous threads
+        if not hasattr(self, "_jobs"):
+            self._jobs = []
+
+        thread = QThread(self)
+        worker = Worker(fn)
+        worker.moveToThread(thread)
+
+        job = {"thread": thread, "worker": worker}
+        self._jobs.append(job)
+
+        # --- signal wiring ---
+        worker.result.connect(self._on_worker_result, Qt.QueuedConnection)
+        worker.error.connect(self._on_worker_error, Qt.QueuedConnection)
+
+        # When worker completes, ask the thread event loop to stop
+        worker.finished.connect(thread.quit, Qt.QueuedConnection)
+
+        # When thread actually stops, cleanup safely on the UI thread
+        def cleanup():
+            try:
+                self._jobs.remove(job)
+            except ValueError:
+                pass
+            worker.deleteLater()
+            thread.deleteLater()
+
+        thread.finished.connect(cleanup, Qt.QueuedConnection)
+
+        thread.started.connect(worker.run)
+        thread.start()
+
+        btn = self.sender()
+        btn.setEnabled(False)
+        def reenable():
+            btn.setEnabled(True)
+        thread.finished.connect(reenable, Qt.QueuedConnection)
+
+
     # ---------- Helpers ---------- #
 
     def _pretty_print(self, text: str) -> str:
@@ -187,9 +265,10 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._set_status("Fetching Instance State…")
-        state = get_instance_state(instance_id)
-        self.output.setPlainText(self._pretty_print(state))
+        self._run_async(
+            "Fetching Instance State…",
+            lambda: get_instance_state(instance_id)
+        )
 
     def run_set_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
