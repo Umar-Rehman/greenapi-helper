@@ -1,0 +1,99 @@
+/* Window background */
+QWidget {
+    background-color: #E8F6EE;
+}
+
+/* Keep output white */
+QTextEdit {
+    background-color: white;
+    color: black;
+}
+
+/* Inputs */
+QLineEdit {
+    background-color: white;
+    color: black;
+}
+
+/* ---------- Tabs (force readable + hover in dark mode) ---------- */
+QTabWidget::pane {
+    border: 1px solid #C7EBD1;
+    background: #E8F6EE;
+}
+
+/* Base tab */
+QTabBar::tab {
+    background: #F3FBF6;
+    color: #1E3D2B;
+    padding: 6px 14px;
+    border: 1px solid #C7EBD1;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    margin-right: 4px;
+    min-width: 80px;
+}
+
+/* Hover */
+QTabBar::tab:hover {
+    background: #DDF2E6;
+    color: #0F2A1C;
+}
+
+/* Selected tab (pops) */
+QTabBar::tab:selected {
+    background: #C7EBD1;
+    color: #0F2A1C;
+    font-weight: 600;
+}
+
+/* Selected + hover */
+QTabBar::tab:selected:hover {
+    background: #B8E3C7;
+}
+
+/* ---------- Base button (default = green / safe) ---------- */
+QPushButton {
+    background-color: white;
+    border: 1px solid #C7EBD1;
+    padding: 6px;
+    border-radius: 4px;
+}
+
+/* Default hover/press */
+QPushButton:hover {
+    background-color: #E6F4EA;
+}
+QPushButton:pressed {
+    background-color: #C7EBD1;
+}
+
+/* ---------- POST / amber buttons ---------- */
+QPushButton[actionType="post"] {
+    background-color: #FFF4CC;
+    border: 1px solid #F2D37A;
+}
+
+QPushButton[actionType="post"]:hover {
+    background-color: #FFE9A3;
+}
+
+QPushButton[actionType="post"]:pressed {
+    background-color: #F2D37A;
+}
+
+/* ---------- Dangerous / red buttons ---------- */
+QPushButton[actionType="danger"] {
+    background-color: #FDEAEA;
+    color: #8B1C1C;
+    border: 1px solid #F5B5B5;
+    font-weight: 600;
+}
+
+QPushButton[actionType="danger"]:hover {
+    background-color: #FAD4D4;
+}
+
+QPushButton[actionType="danger"]:pressed {
+    background-color: #F5B5B5;
+}

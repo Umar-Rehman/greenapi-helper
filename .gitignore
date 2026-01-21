@@ -1,0 +1,39 @@
+# Virtual environments
+.venv/
+venv/
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Environment files
+.env.local
+.env
+.env.*
+
+# Certificates / keys
+*.crt
+*.key
+*.pem
+*.pfx
+*.cer
+*.der
+
+# Local certificate directories
+certs/
+ssl/
+
+# OS / editor junk
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.vscode/
+.idea/
+
+# Archives
+*.zip
+
+# Logs
+*.log
