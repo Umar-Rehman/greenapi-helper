@@ -360,18 +360,20 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._set_status("Fetching Incoming Messages Journal…")
-        journal = get_incoming_msgs_journal(instance_id)
-        self.output.setPlainText(self._pretty_print(journal))
+        self._run_async(
+            "Fetching Incoming Messages Journal…",
+            lambda: get_incoming_msgs_journal(instance_id),
+        )
 
     def run_get_outgoing_msgs_journal(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
 
-        self._set_status("Fetching Outgoing Messages Journal…")
-        journal = get_outgoing_msgs_journal(instance_id)
-        self.output.setPlainText(self._pretty_print(journal))
+        self._run_async(
+            "Fetching Outgoing Messages Journal…",
+            lambda: get_outgoing_msgs_journal(instance_id),
+        )
 
     # ---------- Queue Calls Buttons ---------- #
 
