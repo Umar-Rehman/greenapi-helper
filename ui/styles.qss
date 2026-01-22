@@ -1,18 +1,23 @@
-/* Window background */
+/* ---------- Global defaults (FIX dark mode text) ---------- */
 QWidget {
     background-color: #E8F6EE;
+    color: #111;                /* force readable text */
+}
+
+QLabel {
+    color: #111;
 }
 
 /* Keep output white */
 QTextEdit {
     background-color: white;
-    color: black;
+    color: #111;
 }
 
 /* Inputs */
 QLineEdit {
     background-color: white;
-    color: black;
+    color: #111;
 }
 
 /* ---------- Tabs (force readable + hover in dark mode) ---------- */
@@ -55,6 +60,7 @@ QTabBar::tab:selected:hover {
 /* ---------- Base button (default = green / safe) ---------- */
 QPushButton {
     background-color: white;
+    color: #111;
     border: 1px solid #C7EBD1;
     padding: 6px;
     border-radius: 4px;
@@ -71,6 +77,7 @@ QPushButton:pressed {
 /* ---------- POST / amber buttons ---------- */
 QPushButton[actionType="post"] {
     background-color: #FFF4CC;
+    color: #5A4300;
     border: 1px solid #F2D37A;
 }
 
