@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 import json
 import traceback
-from PySide6.QtGui import QPalette, QColor
 from PySide6.QtCore import (
     Qt,
     QObject,
@@ -22,9 +21,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QTabWidget,
 )
-from elk_queries import (
-    resolve_api_url,
-    get_api_token,
+from elk_auth import get_api_token
+from api_url_resolver import resolve_api_url
+from greenapi_client import (
     get_instance_settings,
     set_instance_settings,
     get_instance_state,
@@ -338,15 +337,26 @@ class App(QWidget):
         if not instance_id:
             return
 
-        api_token = get_api_token(instance_id)
-        if not api_token or api_token == "apiToken not found":
-            self.output.setPlainText(f"Failed to get apiToken: {api_token}")
+        # TODO: replace this with settings taken from UI later
+        settings = {"webhookUrl": ""}  # example payload
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm setSettings",
+            f"Apply settings to instance {instance_id}?\n\nThis changes instance configuration.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            self.output.setPlainText("setSettings cancelled.")
             return
 
-        # For demonstration, we'll set empty settings (you can modify as needed)
-        self._set_status("Setting Instance Settings…")
-        result = set_instance_settings(instance_id, api_token)
-        self.output.setPlainText(self._pretty_print(result))
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: set_instance_settings(api_url, instance_id, api_token, settings)
+            )
+
+        self._run_async("Applying Instance Settings…", work)
 
     def run_get_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
