@@ -209,42 +209,32 @@ class App(QWidget):
 
     # ---------- Helpers ---------- #
 
-    def _pretty_print(self, text: str) -> str:
-        """Pretty-print JSON if possible, else return original text."""
+    def _pretty_print(self, value) -> str:
         try:
-            parsed = json.loads(text)
-            return json.dumps(parsed, indent=2, ensure_ascii=False)
+            if isinstance(value, (dict, list)):
+                return json.dumps(value, indent=2, ensure_ascii=False)
+
+            if isinstance(value, (bytes, bytearray)):
+                value = value.decode("utf-8", errors="replace")
+
+            if isinstance(value, str):
+                parsed = json.loads(value)  # will throw if not JSON
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+
+            return str(value)
         except Exception:
-            return text
+            return str(value)
 
     def _get_instance_id_or_warn(self) -> str | None:
         instance_id = self.instance_input.text().strip()
         if not instance_id:
             self.output.setPlainText("Please enter an Instance ID.")
+            self.instance_input.setFocus()
             return None
         return instance_id
 
     def _set_status(self, msg: str):
         self.output.setPlainText(msg)
-        QApplication.processEvents()
-
-    def apply_light_palette(app: QApplication):
-        p = QPalette()
-
-        # Window + general background
-        p.setColor(QPalette.Window, QColor("#E8F6EE"))
-        p.setColor(QPalette.Base, QColor("#FFFFFF"))          # QTextEdit/QLineEdit background
-        p.setColor(QPalette.AlternateBase, QColor("#F3FBF6"))
-
-        # Text colors
-        p.setColor(QPalette.WindowText, Qt.black)
-        p.setColor(QPalette.Text, Qt.black)
-        p.setColor(QPalette.ButtonText, Qt.black)
-
-        # Buttons
-        p.setColor(QPalette.Button, QColor("#FFFFFF"))
-
-        app.setPalette(p)
 
     # ---------- Account Calls Buttons ---------- #
 
@@ -382,18 +372,20 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._set_status("Fetching Message Queue Count…")
-        count = get_msg_queue_count(instance_id)
-        self.output.setPlainText(self._pretty_print(count))
+        self._run_async(
+            "Fetching Message Queue Count…",
+            lambda: get_msg_queue_count(instance_id),
+        )
 
     def run_get_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
 
-        self._set_status("Fetching Messages Queued to Send…")
-        queued = get_msg_queue(instance_id)
-        self.output.setPlainText(self._pretty_print(queued))
+        self._run_async(
+            "Fetching Messages Queued to Send…",
+            lambda: get_msg_queue(instance_id),
+        )
 
     def run_clear_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
@@ -410,30 +402,30 @@ class App(QWidget):
             self.output.setPlainText("Clearing message queue cancelled.")
             return
 
-        self._set_status("Clearing Message Queue to Send…")
+        def work():
+            api_token = get_api_token(instance_id)
+            if not api_token or api_token == "apiToken not found":
+                return f"Failed to get apiToken: {api_token}"
 
-        api_token = get_api_token(instance_id)
-        if not api_token or api_token == "apiToken not found":
-            self.output.setPlainText(f"Failed to get apiToken: {api_token}")
-            return
+            result = clear_msg_queue_to_send(instance_id, api_token)
+            if result == '{"isCleared":true}':
+                return "Message queue cleared successfully."
+            return result
 
-        result = clear_msg_queue_to_send(instance_id, api_token)
-        if result == '{"isCleared":true}':
-            result = "Message queue cleared successfully."
-        self.output.setPlainText(result)
+        self._run_async("Clearing Message Queue to Send…", work)
 
     def run_get_webhook_count(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
 
-        self._set_status("Fetching Webhook Count…")
-        webhook_count = get_webhook_count(instance_id)
-        self.output.setPlainText(self._pretty_print(webhook_count))
+        self._run_async(
+            "Fetching Webhook Count…",
+            lambda: get_webhook_count(instance_id),
+        )
 
 if __name__ == "__main__":
     app = QApplication([])
-    App.apply_light_palette(app)
     with open(resource_path("ui/styles.qss"), "r", encoding="utf-8") as f:
         app.setStyleSheet(f.read())
     w = App()
