@@ -161,12 +161,11 @@ class App(QWidget):
 
     @Slot(str)
     def _on_worker_error(self, err: str):
-        self.output.setPlainText("❌ Error:\n" + err)
+        self.output.setPlainText("Error:\n" + err)
 
     def _run_async(self, status_text: str, fn):
         self._set_status(status_text)
 
-        # Keep a list so multiple clicks don't overwrite previous threads
         if not hasattr(self, "_jobs"):
             self._jobs = []
 
@@ -177,15 +176,24 @@ class App(QWidget):
         job = {"thread": thread, "worker": worker}
         self._jobs.append(job)
 
+        # Disable the clicked button
+        btn = self.sender()
+        if btn is not None:
+            btn.setEnabled(False)
+
         # --- signal wiring ---
         worker.result.connect(self._on_worker_result, Qt.QueuedConnection)
         worker.error.connect(self._on_worker_error, Qt.QueuedConnection)
 
-        # When worker completes, ask the thread event loop to stop
+        # stop thread loop after worker finishes
         worker.finished.connect(thread.quit, Qt.QueuedConnection)
 
-        # When thread actually stops, cleanup safely on the UI thread
         def cleanup():
+            # re-enable button
+            if btn is not None:
+                btn.setEnabled(True)
+
+            # remove job and delete objects
             try:
                 self._jobs.remove(job)
             except ValueError:
@@ -193,17 +201,11 @@ class App(QWidget):
             worker.deleteLater()
             thread.deleteLater()
 
+        # cleanup only when thread is fully stopped
         thread.finished.connect(cleanup, Qt.QueuedConnection)
 
         thread.started.connect(worker.run)
         thread.start()
-
-        btn = self.sender()
-        btn.setEnabled(False)
-        def reenable():
-            btn.setEnabled(True)
-        thread.finished.connect(reenable, Qt.QueuedConnection)
-
 
     # ---------- Helpers ---------- #
 
