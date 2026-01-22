@@ -73,17 +73,6 @@ def get_api_token(instance_id: str) -> str:
 
     return "apiToken not found"
 
-def prepare_request(instance_id:str) -> tuple[str, str]:
-    """
-    Prepares the api_url and api_token for the given instance_id.
-    Returns a tuple of (api_url, api_token).
-    """
-    api_token = get_api_token(instance_id)
-    if not api_token or api_token == "":
-        return None, api_token  # Return error message
-    api_url = resolve_api_url(instance_id)
-    return api_url, api_token
-
 def send_request(url: str) -> str:
     resp = requests.get(
     url,
@@ -97,27 +86,18 @@ def send_request(url: str) -> str:
     
     return resp.text
 
+def _build_url(api_url: str, instance_id: str, path: str) -> str:
+    return f"{api_url}/waInstance{instance_id}/{path}"
+
 # ---------- Account Calls ---------- #
 
-def get_instance_state(instance_id: str) -> str:
-    """
-    Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/getStateInstance/{{apiTokenInstance}}
-    """
-    api_url, api_token = prepare_request(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/getStateInstance/{api_token}"
-    output = send_request(url)
-    return output
+def get_instance_state(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"getStateInstance/{api_token}")
+    return send_request(url)
 
-def get_instance_settings(instance_id: str) -> str:
-    """
-    Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/getSettings/{{apiTokenInstance}}
-    """
-    api_url, api_token = prepare_request(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/getSettings/{api_token}"
-    output = send_request(url)
-    return output
+def get_instance_settings(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"getSettings/{api_token}")
+    return send_request(url)
 
 def set_instance_settings(instance_id: str, api_token: str, settings: dict) -> str:
     """
@@ -129,85 +109,38 @@ def set_instance_settings(instance_id: str, api_token: str, settings: dict) -> s
     output = send_request(url)
     return output
 
-def reboot_instance(instance_id: str, api_token: str) -> str:
-    """
-    Calls:
-      {apiUrl}/waInstance{idInstance}/reboot/{apiTokenInstance}
-    """
-    api_url = resolve_api_url(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/reboot/{api_token}"
-    output = send_request(url)
-    return output
+def logout_instance(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"logout/{api_token}")
+    return send_request(url)
 
-def logout_instance(instance_id: str, api_token: str) -> str:
-    """
-    Calls:
-      {{apiUrl}}/waInstance{{idInstance}}/logout/{{apiTokenInstance}}
-    """
-    api_url = resolve_api_url(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/logout/{api_token}"
-    output = send_request(url)
-    return output
+def reboot_instance(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"reboot/{api_token}")
+    return send_request(url)
 
 # ---------- Journal Calls ---------- #
 
-def get_incoming_msgs_journal(instance_id: str) -> str:
-    """
-    Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/lastIncomingMessages/{{apiTokenInstance}}?minutes=1440
-    """
-    api_url, api_token = prepare_request(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/lastIncomingMessages/{api_token}?minutes=1440"
-    output = send_request(url)
-    return output
+def get_incoming_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
+    url = _build_url(api_url, instance_id, f"lastIncomingMessages/{api_token}?minutes={minutes}")
+    return send_request(url)
 
-def get_outgoing_msgs_journal(instance_id: str) -> str:
-    """
-    Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/lastOutgoingMessages/{{apiTokenInstance}}?minutes=1440
-    """
-    api_url, api_token = prepare_request(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/lastOutgoingMessages/{api_token}?minutes=1440"
-    output = send_request(url)
-    return output
+def get_outgoing_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
+    url = _build_url(api_url, instance_id, f"lastOutgoingMessages/{api_token}?minutes={minutes}")
+    return send_request(url)
 
 # ---------- Queue Calls ---------- #
 
-def get_msg_queue_count(instance_id: str) -> int:
-    """
-    Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/getMessagesCount/{{apiTokenInstance}}
-    """
-    api_url, api_token = prepare_request(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/getMessagesCount/{api_token}"
-    output = send_request(url)
-    return output
+def get_msg_queue_count(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"getMessagesCount/{api_token}")
+    return send_request(url)
 
-def get_msg_queue(instance_id: str) -> str:
-    """Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/showMessagesQueue/{{apiTokenInstance}}
-    """
-    api_url, api_token = prepare_request(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/showMessagesQueue/{api_token}"
-    output = send_request(url)
-    return output
+def get_msg_queue(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"showMessagesQueue/{api_token}")
+    return send_request(url)
 
-def clear_msg_queue_to_send(instance_id: str, api_token: str) -> str:
-    """
-    Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/clearMessagesQueue/{{apiTokenInstance}}
-    """
-    api_url = resolve_api_url(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/clearMessagesQueue/{api_token}"
-    output = send_request(url)
-    return output
+def clear_msg_queue_to_send(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"clearMessagesQueue/{api_token}")
+    return send_request(url)
 
-def get_webhook_count(instance_id: str) -> int:
-    """
-    Calls:
-        {{apiUrl}}/waInstance{{idInstance}}/getWebhooksCount/{{apiTokenInstance}}
-    """
-    api_url, api_token = prepare_request(instance_id)
-    url = f"{api_url}/waInstance{instance_id}/getWebhooksCount/{api_token}"
-    output = send_request(url)
-    return output
+def get_webhook_count(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"getWebhooksCount/{api_token}")
+    return send_request(url)
