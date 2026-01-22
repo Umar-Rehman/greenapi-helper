@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 import json
 import traceback
+from PySide6.QtGui import QIcon
 from PySide6.QtCore import (
     Qt,
     QObject,
@@ -46,7 +47,7 @@ def resource_path(relative_path: str) -> str:
 
 class Worker(QObject):
     finished = Signal()
-    result = Signal(object)   # <-- changed
+    result = Signal(object)
     error = Signal(str)
 
     def __init__(self, fn):
@@ -57,7 +58,7 @@ class Worker(QObject):
     def run(self):
         try:
             out = self.fn()
-            self.result.emit(out)   # <-- changed (no str())
+            self.result.emit(out)
         except Exception:
             self.error.emit(traceback.format_exc())
         finally:
@@ -523,6 +524,7 @@ if __name__ == "__main__":
     app = QApplication([])
     with open(resource_path("ui/styles.qss"), "r", encoding="utf-8") as f:
         app.setStyleSheet(f.read())
+    app.setWindowIcon(QIcon(resource_path("ui/greenapiicon.ico")))
     w = App()
     w.resize(750, 600)
     w.show()
