@@ -1,4 +1,5 @@
 import sys
+import time
 from pathlib import Path
 import json
 import traceback
@@ -38,6 +39,7 @@ from elk_queries import (
 )
 
 # ---------- Resource Path Helper ---------- #
+
 def resource_path(relative_path: str) -> str:
     # When running as a PyInstaller onefile exe, files live under sys._MEIPASS
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -45,7 +47,7 @@ def resource_path(relative_path: str) -> str:
 
 class Worker(QObject):
     finished = Signal()
-    result = Signal(str)
+    result = Signal(object)   # <-- changed
     error = Signal(str)
 
     def __init__(self, fn):
@@ -56,8 +58,7 @@ class Worker(QObject):
     def run(self):
         try:
             out = self.fn()
-            # ensure we always emit a string
-            self.result.emit(out if isinstance(out, str) else str(out))
+            self.result.emit(out)   # <-- changed (no str())
         except Exception:
             self.error.emit(traceback.format_exc())
         finally:
@@ -67,6 +68,8 @@ class App(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("The Helper")
+        self._ctx = None  # {"instance_id": str, "api_url": str, "api_token": str, "ts": float}
+        self._ctx_ttl_seconds = 10 * 60  # 10 minutes
 
         root = QVBoxLayout()
 
@@ -155,9 +158,21 @@ class App(QWidget):
 
         self.setLayout(root)
 
-    @Slot(str)
-    def _on_worker_result(self, text: str):
-        self.output.setPlainText(self._pretty_print(text))
+    @Slot(object)
+    def _on_worker_result(self, payload):
+        # payload can be a string OR dict {"ctx":..., "result":...} / {"ctx":..., "error":...}
+        if isinstance(payload, dict) and "ctx" in payload:
+            self._ctx = payload["ctx"]
+
+            if "error" in payload:
+                self.output.setPlainText("❌ " + str(payload["error"]))
+                return
+
+            self.output.setPlainText(self._pretty_print(payload.get("result", "")))
+            return
+
+        # fallback: plain text
+        self.output.setPlainText(self._pretty_print(str(payload)))
 
     @Slot(str)
     def _on_worker_error(self, err: str):
@@ -235,6 +250,57 @@ class App(QWidget):
 
     def _set_status(self, msg: str):
         self.output.setPlainText(msg)
+    
+    def _ctx_is_valid(self, instance_id: str) -> bool:
+        if not self._ctx:
+            return False
+        if self._ctx.get("instance_id") != instance_id:
+            return False
+        age = time.time() - float(self._ctx.get("ts", 0))
+        if age > self._ctx_ttl_seconds:
+            return False
+
+        tok = (self._ctx.get("api_token") or "").strip()
+        if not tok or tok == "apiToken not found" or tok.startswith("HTTP "):
+            return False
+
+        url = (self._ctx.get("api_url") or "").strip()
+        if not url:
+            return False
+
+        return True
+
+    def _fetch_ctx(self, instance_id: str) -> dict:
+        # Runs in worker thread
+        token = get_api_token(instance_id)
+        url = resolve_api_url(instance_id)
+        return {
+            "instance_id": instance_id,
+            "api_url": url,
+            "api_token": token,
+            "ts": time.time(),
+        }
+
+    def _with_ctx(self, instance_id: str, call_fn):
+        """
+        Runs call_fn(api_url, api_token) with cached context if fresh,
+        otherwise refreshes token/url first. Returns dict payload.
+        """
+        if self._ctx_is_valid(instance_id):
+            ctx = self._ctx
+        else:
+            ctx = self._fetch_ctx(instance_id)
+
+        token = ctx.get("api_token", "")
+        if not token or token == "apiToken not found" or str(token).startswith("HTTP "):
+            return {"ctx": ctx, "error": f"Failed to get apiToken: {token}"}
+
+        api_url = ctx.get("api_url", "")
+        if not api_url:
+            return {"ctx": ctx, "error": "Failed to resolve apiUrl"}
+
+        result = call_fn(api_url, token)
+        return {"ctx": ctx, "result": result}
 
     # ---------- Account Calls Buttons ---------- #
 
@@ -244,13 +310,13 @@ class App(QWidget):
             return
 
         def work():
-            token = get_api_token(instance_id)
-            url = resolve_api_url(instance_id)
-            return (
-                f"API URL:\n{url}\n\n"
+            # always fetch fresh for the "info" button, so it reflects reality
+            ctx = self._fetch_ctx(instance_id)
+            return {"ctx": ctx, "result":
+                f"API URL:\n{ctx['api_url']}\n\n"
                 f"Instance ID:\n{instance_id}\n\n"
-                f"API Token:\n{token}\n"
-            )
+                f"API Token:\n{ctx['api_token']}\n"
+            }
 
         self._run_async("Fetching information…", work)
 
@@ -259,10 +325,13 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._run_async(
-            "Fetching Instance State…",
-            lambda: get_instance_state(instance_id)
-        )
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_instance_state(api_url, instance_id, api_token)
+            )
+
+        self._run_async("Fetching Instance State…", work)
 
     def run_set_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -284,10 +353,13 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._run_async(
-            "Fetching Instance Settings…",
-            lambda: get_instance_settings(instance_id),
-        )
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_instance_settings(api_url, instance_id, api_token)
+            )
+
+        self._run_async("Fetching Instance Settings…", work)
 
     def run_logout_instance(self):
         instance_id = self._get_instance_id_or_warn()
@@ -305,14 +377,13 @@ class App(QWidget):
             return
 
         def work():
-            api_token = get_api_token(instance_id)
-            if not api_token or api_token == "apiToken not found":
-                return f"Failed to get apiToken: {api_token}"
-
-            result = logout_instance(instance_id, api_token)
-            if result == '{"isLogout":true}':
-                return "Logout successful."
-            return result
+            payload = self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: logout_instance(api_url, instance_id, api_token)
+            )
+            if isinstance(payload, dict) and payload.get("result") == '{"isLogout":true}':
+                payload["result"] = "Logout successful."
+            return payload
 
         self._run_async("Logging out instance…", work)
 
@@ -332,14 +403,13 @@ class App(QWidget):
             return
 
         def work():
-            api_token = get_api_token(instance_id)
-            if not api_token or api_token == "apiToken not found":
-                return f"Failed to get apiToken: {api_token}"
-
-            result = reboot_instance(instance_id, api_token)
-            if result == '{"isReboot":true}':
-                return "Reboot successful."
-            return result
+            payload = self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: reboot_instance(api_url, instance_id, api_token)
+            )
+            if isinstance(payload, dict) and payload.get("result") == '{"isReboot":true}':
+                payload["result"] = "Reboot successful."
+            return payload
 
         self._run_async("Rebooting instance…", work)
 
@@ -350,20 +420,26 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._run_async(
-            "Fetching Incoming Messages Journal…",
-            lambda: get_incoming_msgs_journal(instance_id),
-        )
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_incoming_msgs_journal(api_url, instance_id, api_token, minutes=1440)
+            )
+
+        self._run_async("Fetching Incoming Messages Journal…", work)
 
     def run_get_outgoing_msgs_journal(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
 
-        self._run_async(
-            "Fetching Outgoing Messages Journal…",
-            lambda: get_outgoing_msgs_journal(instance_id),
-        )
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_outgoing_msgs_journal(api_url, instance_id, api_token, minutes=1440)
+            )
+
+        self._run_async("Fetching Outgoing Messages Journal…", work)
 
     # ---------- Queue Calls Buttons ---------- #
 
@@ -372,20 +448,26 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._run_async(
-            "Fetching Message Queue Count…",
-            lambda: get_msg_queue_count(instance_id),
-        )
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_msg_queue_count(api_url, instance_id, api_token)
+            )
+
+        self._run_async("Fetching Message Queue Count…", work)
 
     def run_get_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
 
-        self._run_async(
-            "Fetching Messages Queued to Send…",
-            lambda: get_msg_queue(instance_id),
-        )
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_msg_queue(api_url, instance_id, api_token)
+            )
+
+        self._run_async("Fetching Messages Queued to Send…", work)
 
     def run_clear_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
@@ -403,14 +485,14 @@ class App(QWidget):
             return
 
         def work():
-            api_token = get_api_token(instance_id)
-            if not api_token or api_token == "apiToken not found":
-                return f"Failed to get apiToken: {api_token}"
-
-            result = clear_msg_queue_to_send(instance_id, api_token)
-            if result == '{"isCleared":true}':
-                return "Message queue cleared successfully."
-            return result
+            payload = self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: clear_msg_queue_to_send(api_url, instance_id, api_token)
+            )
+            # nice message if success
+            if isinstance(payload, dict) and payload.get("result") == '{"isCleared":true}':
+                payload["result"] = "Message queue cleared successfully."
+            return payload
 
         self._run_async("Clearing Message Queue to Send…", work)
 
@@ -419,10 +501,13 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._run_async(
-            "Fetching Webhook Count…",
-            lambda: get_webhook_count(instance_id),
-        )
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_webhook_count(api_url, instance_id, api_token)
+            )
+
+        self._run_async("Fetching Webhook Count…", work)
 
 if __name__ == "__main__":
     app = QApplication([])
