@@ -251,14 +251,16 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._set_status("Fetching information…")
-        token = get_api_token(instance_id)
-        url = resolve_api_url(instance_id)
-        self.output.setPlainText(
-            f"API URL:\n{url}\n\n"
-            f"Instance ID:\n{instance_id}\n\n"
-            f"API Token:\n{self._pretty_print(token)}\n\n"
-        )
+        def work():
+            token = get_api_token(instance_id)
+            url = resolve_api_url(instance_id)
+            return (
+                f"API URL:\n{url}\n\n"
+                f"Instance ID:\n{instance_id}\n\n"
+                f"API Token:\n{token}\n"
+            )
+
+        self._run_async("Fetching information…", work)
 
     def run_get_instance_state(self):
         instance_id = self._get_instance_id_or_warn()
@@ -290,36 +292,10 @@ class App(QWidget):
         if not instance_id:
             return
 
-        self._set_status("Fetching Instance Settings…")
-        settings = get_instance_settings(instance_id)
-        self.output.setPlainText(self._pretty_print(settings))
-
-    def run_reboot_instance(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        reply = QMessageBox.question(
-            self,
-            "Confirm Reboot",
-            f"Are you sure you want to reboot instance {instance_id}?\n\nThis may interrupt message processing.",
-            QMessageBox.Yes | QMessageBox.No,
+        self._run_async(
+            "Fetching Instance Settings…",
+            lambda: get_instance_settings(instance_id),
         )
-        if reply != QMessageBox.Yes:
-            self.output.setPlainText("Reboot cancelled.")
-            return
-
-        self._set_status("Rebooting instance…")
-
-        api_token = get_api_token(instance_id)
-        if not api_token or api_token == "apiToken not found":
-            self.output.setPlainText(f"Failed to get apiToken: {api_token}")
-            return
-
-        result = reboot_instance(instance_id, api_token)
-        if result == '{"isReboot":true}':
-            result = "Reboot successful."
-        self.output.setPlainText(result)
 
     def run_logout_instance(self):
         instance_id = self._get_instance_id_or_warn()
@@ -336,17 +312,44 @@ class App(QWidget):
             self.output.setPlainText("Logout cancelled.")
             return
 
-        self._set_status("Logging out instance…")
+        def work():
+            api_token = get_api_token(instance_id)
+            if not api_token or api_token == "apiToken not found":
+                return f"Failed to get apiToken: {api_token}"
 
-        api_token = get_api_token(instance_id)
-        if not api_token or api_token == "apiToken not found":
-            self.output.setPlainText(f"Failed to get apiToken: {api_token}")
+            result = logout_instance(instance_id, api_token)
+            if result == '{"isLogout":true}':
+                return "Logout successful."
+            return result
+
+        self._run_async("Logging out instance…", work)
+
+    def run_reboot_instance(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
             return
 
-        result = logout_instance(instance_id, api_token)
-        if result == '{"isLogout":true}':
-            result = "Logout successful."
-        self.output.setPlainText(result)
+        reply = QMessageBox.question(
+            self,
+            "Confirm Reboot",
+            f"Are you sure you want to reboot instance {instance_id}?\n\nThis may interrupt message processing.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            self.output.setPlainText("Reboot cancelled.")
+            return
+
+        def work():
+            api_token = get_api_token(instance_id)
+            if not api_token or api_token == "apiToken not found":
+                return f"Failed to get apiToken: {api_token}"
+
+            result = reboot_instance(instance_id, api_token)
+            if result == '{"isReboot":true}':
+                return "Reboot successful."
+            return result
+
+        self._run_async("Rebooting instance…", work)
 
     # ---------- Journals Calls Buttons ---------- #
 
