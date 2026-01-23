@@ -1,9 +1,15 @@
 import requests
+from pathlib import Path
 
-CLIENT_CERT = "client.crt"
-CLIENT_KEY = "client.key"
+# --------- Configuration ---------- #
 
-#--------- Helper Functions ---------- #
+CLIENT_CERT = Path("client.crt")
+CLIENT_KEY = Path("client.key")
+
+VERIFY_TLS = True
+TIMEOUT_SECONDS = 60
+
+# --------- Helper Functions ---------- #
 
 def _build_url(api_url: str, instance_id: str, path: str) -> str:
     return f"{api_url}/waInstance{instance_id}/{path}"
@@ -14,9 +20,9 @@ def send_request(method: str, url: str, *, json_body: dict | None = None) -> str
         url=url,
         headers={"accept": "application/json"},
         json=json_body,
-        cert=(CLIENT_CERT, CLIENT_KEY),
-        verify=True,
-        timeout=60,
+        cert=(str(CLIENT_CERT), str(CLIENT_KEY)),
+        verify=VERIFY_TLS,
+        timeout=TIMEOUT_SECONDS,
     )
 
     if resp.status_code != 200:
@@ -55,6 +61,16 @@ def get_incoming_msgs_journal(api_url: str, instance_id: str, api_token: str, mi
 def get_outgoing_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     url = _build_url(api_url, instance_id, f"lastOutgoingMessages/{api_token}?minutes={minutes}")
     return send_request("GET", url)
+
+def get_chat_history(api_url: str, instance_id: str, api_token: str, chat_id: str, count: int = 10) -> str:
+    url = _build_url(api_url, instance_id, f"getChatHistory/{api_token}")
+    body = {"chatId": chat_id, "count": count}
+    return send_request("POST", url, json_body=body)
+
+def get_message(api_url: str, instance_id: str, api_token: str, chat_id: str, id_message: str) -> str:
+    url = _build_url(api_url, instance_id, f"getMessage/{api_token}")
+    body = {"chatId": chat_id, "idMessage": id_message}
+    return send_request("POST", url, json_body=body)
 
 # ---------- Queue Calls ---------- #
 
