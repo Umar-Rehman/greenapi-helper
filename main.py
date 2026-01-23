@@ -1,8 +1,5 @@
-import sys
-import time
+import sys, time, json, traceback
 from pathlib import Path
-import json
-import traceback
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import (
     Qt,
@@ -20,7 +17,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTextEdit,
     QMessageBox,
-    QInputDialog,
     QTabWidget,
     QDialog,
     QDialogButtonBox,
@@ -368,7 +364,7 @@ class App(QWidget):
 
         chat_edit = QLineEdit(default_chat_id)
         chat_edit.setMinimumWidth(300)
-        chat_edit.setPlaceholderText("e.g. 79876543210@c.us or 1203630...@g.us")
+        chat_edit.setPlaceholderText("e.g. XXXXXXXXXXX@c.us or XXXXXXX...@g.us")
 
         msg_edit = QLineEdit()
         msg_edit.setPlaceholderText("e.g. BAE5F4886F6F2D05")
