@@ -293,6 +293,7 @@ class App(QWidget):
 
     def _fetch_ctx(self, instance_id: str) -> dict:
         # Runs in worker thread
+        # print(f"Fetching apiToken and apiUrl for instance {instance_id}…") # debug to see if getting from kibana or cache (ctx)
         token = get_api_token(instance_id)
         url = resolve_api_url(instance_id)
         return {
