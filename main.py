@@ -20,7 +20,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTextEdit,
     QMessageBox,
+    QInputDialog,
     QTabWidget,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QSpinBox,
+    QStyleFactory,
 )
 from elk_auth import get_api_token
 from api_url_resolver import resolve_api_url
@@ -30,6 +36,8 @@ from greenapi_client import (
     get_instance_state,
     get_incoming_msgs_journal,
     get_outgoing_msgs_journal,
+    get_chat_history,
+    get_message,
     get_msg_queue_count,
     get_msg_queue,
     clear_msg_queue_to_send,
@@ -70,6 +78,7 @@ class App(QWidget):
         self.setWindowTitle("The Helper")
         self._ctx = None  # {"instance_id": str, "api_url": str, "api_token": str, "ts": float}
         self._ctx_ttl_seconds = 10 * 60  # 10 minutes
+        self._last_chat_id = None
 
         root = QVBoxLayout()
 
@@ -122,6 +131,16 @@ class App(QWidget):
         self.outgoing_journal_button.clicked.connect(self.run_get_outgoing_msgs_journal)
         journals_layout.addWidget(self.outgoing_journal_button)
 
+        self.chat_history_button = QPushButton("Get Chat History")
+        self.chat_history_button.clicked.connect(self.run_get_chat_history)
+        self.chat_history_button.setProperty("actionType", "post")
+        journals_layout.addWidget(self.chat_history_button)
+
+        self.get_message_button = QPushButton("Get Message")
+        self.get_message_button.clicked.connect(self.run_get_message)
+        self.get_message_button.setProperty("actionType", "post")
+        journals_layout.addWidget(self.get_message_button)
+
         journals_layout.addStretch(1)
         tabs.addTab(journals_tab, "Journals")
 
@@ -158,6 +177,8 @@ class App(QWidget):
 
         self.setLayout(root)
 
+    # ---------- Worker handlers ---------- #
+
     @Slot(object)
     def _on_worker_result(self, payload):
         # payload can be a string OR dict {"ctx":..., "result":...} / {"ctx":..., "error":...}
@@ -165,7 +186,7 @@ class App(QWidget):
             self._ctx = payload["ctx"]
 
             if "error" in payload:
-                self.output.setPlainText("❌ " + str(payload["error"]))
+                self.output.setPlainText(str(payload["error"]))
                 return
 
             self.output.setPlainText(self._pretty_print(payload.get("result", "")))
@@ -177,7 +198,7 @@ class App(QWidget):
     @Slot(str)
     def _on_worker_error(self, err: str):
         self.output.setPlainText("Error:\n" + err)
-
+    
     def _run_async(self, status_text: str, fn):
         self._set_status(status_text)
 
@@ -239,7 +260,7 @@ class App(QWidget):
             return str(value)
         except Exception:
             return str(value)
-
+    
     def _get_instance_id_or_warn(self) -> str | None:
         instance_id = self.instance_input.text().strip()
         if not instance_id:
@@ -250,7 +271,7 @@ class App(QWidget):
 
     def _set_status(self, msg: str):
         self.output.setPlainText(msg)
-    
+
     def _ctx_is_valid(self, instance_id: str) -> bool:
         if not self._ctx:
             return False
@@ -301,6 +322,76 @@ class App(QWidget):
 
         result = call_fn(api_url, token)
         return {"ctx": ctx, "result": result}
+    
+    def _ask_chat_history_params(self, default_chat_id: str = "", default_count: int = 10):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Get Chat History")
+        dlg.setStyle(QStyleFactory.create("Fusion"))
+
+        form = QFormLayout(dlg)
+
+        chat_edit = QLineEdit(default_chat_id)
+        chat_edit.setMinimumWidth(300)
+
+        chat_edit.setPlaceholderText("e.g. XXXXXXXXXXX@c.us or XXXXXXX...@g.us")
+
+        count_spin = QSpinBox()
+        count_spin.setRange(1, 1000)
+        count_spin.setSingleStep(10)
+        count_spin.setValue(default_count)
+
+        form.addRow("chatId:", chat_edit)
+        form.addRow("Count:", count_spin)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        form.addRow(buttons)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+
+        chat_edit.setFocus()
+
+        if dlg.exec() != QDialog.Accepted:
+            return None
+
+        chat_id = chat_edit.text().strip()
+        if not chat_id:
+            return None
+
+        return chat_id, int(count_spin.value())
+
+    def _ask_get_message_params(self, default_chat_id: str = ""):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Get Message")
+
+        form = QFormLayout(dlg)
+
+        chat_edit = QLineEdit(default_chat_id)
+        chat_edit.setMinimumWidth(300)
+        chat_edit.setPlaceholderText("e.g. 79876543210@c.us or 1203630...@g.us")
+
+        msg_edit = QLineEdit()
+        msg_edit.setPlaceholderText("e.g. BAE5F4886F6F2D05")
+
+        form.addRow("chatId:", chat_edit)
+        form.addRow("idMessage:", msg_edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        form.addRow(buttons)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+
+        chat_edit.setFocus()
+
+        if dlg.exec() != QDialog.Accepted:
+            return None
+
+        chat_id = chat_edit.text().strip()
+        id_message = msg_edit.text().strip()
+
+        if not chat_id or not id_message:
+            return None
+
+        return chat_id, id_message
 
     # ---------- Account Calls Buttons ---------- #
 
@@ -312,10 +403,13 @@ class App(QWidget):
         def work():
             # always fetch fresh for the "info" button, so it reflects reality
             ctx = self._fetch_ctx(instance_id)
-            return {"ctx": ctx, "result":
-                f"API URL:\n{ctx['api_url']}\n\n"
-                f"Instance ID:\n{instance_id}\n\n"
-                f"API Token:\n{ctx['api_token']}\n"
+            return {
+                "ctx": ctx,
+                "result": (
+                    f"API URL:\n{ctx['api_url']}\n\n"
+                    f"Instance ID:\n{instance_id}\n\n"
+                    f"API Token:\n{ctx['api_token']}\n"
+                ),
             }
 
         self._run_async("Fetching information…", work)
@@ -328,7 +422,7 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_instance_state(api_url, instance_id, api_token)
+                lambda api_url, api_token: get_instance_state(api_url, instance_id, api_token),
             )
 
         self._run_async("Fetching Instance State…", work)
@@ -354,7 +448,7 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: set_instance_settings(api_url, instance_id, api_token, settings)
+                lambda api_url, api_token: set_instance_settings(api_url, instance_id, api_token, settings),
             )
 
         self._run_async("Applying Instance Settings…", work)
@@ -367,7 +461,7 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_instance_settings(api_url, instance_id, api_token)
+                lambda api_url, api_token: get_instance_settings(api_url, instance_id, api_token),
             )
 
         self._run_async("Fetching Instance Settings…", work)
@@ -390,7 +484,7 @@ class App(QWidget):
         def work():
             payload = self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: logout_instance(api_url, instance_id, api_token)
+                lambda api_url, api_token: logout_instance(api_url, instance_id, api_token),
             )
             if isinstance(payload, dict) and payload.get("result") == '{"isLogout":true}':
                 payload["result"] = "Logout successful."
@@ -416,7 +510,7 @@ class App(QWidget):
         def work():
             payload = self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: reboot_instance(api_url, instance_id, api_token)
+                lambda api_url, api_token: reboot_instance(api_url, instance_id, api_token),
             )
             if isinstance(payload, dict) and payload.get("result") == '{"isReboot":true}':
                 payload["result"] = "Reboot successful."
@@ -434,7 +528,7 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_incoming_msgs_journal(api_url, instance_id, api_token, minutes=1440)
+                lambda api_url, api_token: get_incoming_msgs_journal(api_url, instance_id, api_token, minutes=1440),
             )
 
         self._run_async("Fetching Incoming Messages Journal…", work)
@@ -447,10 +541,52 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_outgoing_msgs_journal(api_url, instance_id, api_token, minutes=1440)
+                lambda api_url, api_token: get_outgoing_msgs_journal(api_url, instance_id, api_token, minutes=1440),
             )
 
         self._run_async("Fetching Outgoing Messages Journal…", work)
+
+    def run_get_chat_history(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        params = self._ask_chat_history_params(self._last_chat_id or "", default_count=10)
+        if not params:
+            self.output.setPlainText("Get Chat History cancelled.")
+            return
+
+        chat_id, count = params
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_chat_history(api_url, instance_id, api_token, chat_id, count),
+            )
+
+        self._last_chat_id = chat_id
+        self._run_async(f"Fetching Chat History for {chat_id}…", work)
+
+    def run_get_message(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        params = self._ask_get_message_params(self._last_chat_id or "")
+        if not params:
+            self.output.setPlainText("Get Message cancelled.")
+            return
+
+        chat_id, id_message = params
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_message(api_url, instance_id, api_token, chat_id, id_message),
+            )
+
+        self._last_chat_id = chat_id
+        self._run_async(f"Fetching Message {id_message}…", work)
 
     # ---------- Queue Calls Buttons ---------- #
 
@@ -462,7 +598,7 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_msg_queue_count(api_url, instance_id, api_token)
+                lambda api_url, api_token: get_msg_queue_count(api_url, instance_id, api_token),
             )
 
         self._run_async("Fetching Message Queue Count…", work)
@@ -475,7 +611,7 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_msg_queue(api_url, instance_id, api_token)
+                lambda api_url, api_token: get_msg_queue(api_url, instance_id, api_token),
             )
 
         self._run_async("Fetching Messages Queued to Send…", work)
@@ -498,9 +634,8 @@ class App(QWidget):
         def work():
             payload = self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: clear_msg_queue_to_send(api_url, instance_id, api_token)
+                lambda api_url, api_token: clear_msg_queue_to_send(api_url, instance_id, api_token),
             )
-            # nice message if success
             if isinstance(payload, dict) and payload.get("result") == '{"isCleared":true}':
                 payload["result"] = "Message queue cleared successfully."
             return payload
@@ -515,7 +650,7 @@ class App(QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_webhook_count(api_url, instance_id, api_token)
+                lambda api_url, api_token: get_webhook_count(api_url, instance_id, api_token),
             )
 
         self._run_async("Fetching Webhook Count…", work)
