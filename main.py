@@ -1,5 +1,6 @@
 import sys, time, json, traceback
 from pathlib import Path
+from app.version import __version__
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import (
     Qt,
@@ -18,15 +19,14 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QMessageBox,
     QTabWidget,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
-    QSpinBox,
-    QStyleFactory,
+    QDialog
 )
-from elk_auth import get_api_token
-from api_url_resolver import resolve_api_url
-from greenapi_client import (
+ 
+from app.ui_dialogs import ChatHistoryDialog, GetMessageDialog
+
+from greenapi.elk_auth import get_api_token
+from greenapi.api_url_resolver import resolve_api_url
+from greenapi.client import (
     get_instance_settings,
     set_instance_settings,
     get_instance_state,
@@ -49,6 +49,7 @@ def resource_path(relative_path: str) -> str:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return str(base / relative_path)
 
+
 class Worker(QObject):
     finished = Signal()
     result = Signal(object)
@@ -68,10 +69,11 @@ class Worker(QObject):
         finally:
             self.finished.emit()
 
+
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("The Helper")
+        self.setWindowTitle(f"The Helper ({__version__})")
         self._ctx = None  # {"instance_id": str, "api_url": str, "api_token": str, "ts": float}
         self._ctx_ttl_seconds = 10 * 60  # 10 minutes
         self._last_chat_id = None
@@ -194,7 +196,7 @@ class App(QWidget):
     @Slot(str)
     def _on_worker_error(self, err: str):
         self.output.setPlainText("Error:\n" + err)
-    
+
     def _run_async(self, status_text: str, fn):
         self._set_status(status_text)
 
@@ -256,7 +258,7 @@ class App(QWidget):
             return str(value)
         except Exception:
             return str(value)
-    
+
     def _get_instance_id_or_warn(self) -> str | None:
         instance_id = self.instance_input.text().strip()
         if not instance_id:
@@ -288,8 +290,6 @@ class App(QWidget):
         return True
 
     def _fetch_ctx(self, instance_id: str) -> dict:
-        # Runs in worker thread
-        # print(f"Fetching apiToken and apiUrl for instance {instance_id}…") # debug to see if getting from kibana or cache (ctx)
         token = get_api_token(instance_id)
         url = resolve_api_url(instance_id)
         return {
@@ -319,76 +319,6 @@ class App(QWidget):
 
         result = call_fn(api_url, token)
         return {"ctx": ctx, "result": result}
-    
-    def _ask_chat_history_params(self, default_chat_id: str = "", default_count: int = 10):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Get Chat History")
-        dlg.setStyle(QStyleFactory.create("Fusion"))
-
-        form = QFormLayout(dlg)
-
-        chat_edit = QLineEdit(default_chat_id)
-        chat_edit.setMinimumWidth(300)
-
-        chat_edit.setPlaceholderText("e.g. XXXXXXXXXXX@c.us or XXXXXXX...@g.us")
-
-        count_spin = QSpinBox()
-        count_spin.setRange(1, 1000)
-        count_spin.setSingleStep(10)
-        count_spin.setValue(default_count)
-
-        form.addRow("chatId:", chat_edit)
-        form.addRow("Count:", count_spin)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        form.addRow(buttons)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-
-        chat_edit.setFocus()
-
-        if dlg.exec() != QDialog.Accepted:
-            return None
-
-        chat_id = chat_edit.text().strip()
-        if not chat_id:
-            return None
-
-        return chat_id, int(count_spin.value())
-
-    def _ask_get_message_params(self, default_chat_id: str = ""):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Get Message")
-
-        form = QFormLayout(dlg)
-
-        chat_edit = QLineEdit(default_chat_id)
-        chat_edit.setMinimumWidth(300)
-        chat_edit.setPlaceholderText("e.g. XXXXXXXXXXX@c.us or XXXXXXX...@g.us")
-
-        msg_edit = QLineEdit()
-        msg_edit.setPlaceholderText("e.g. BAE5F4886F6F2D05")
-
-        form.addRow("chatId:", chat_edit)
-        form.addRow("idMessage:", msg_edit)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        form.addRow(buttons)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-
-        chat_edit.setFocus()
-
-        if dlg.exec() != QDialog.Accepted:
-            return None
-
-        chat_id = chat_edit.text().strip()
-        id_message = msg_edit.text().strip()
-
-        if not chat_id or not id_message:
-            return None
-
-        return chat_id, id_message
 
     # ---------- Account Calls Buttons ---------- #
 
@@ -398,7 +328,6 @@ class App(QWidget):
             return
 
         def work():
-            # always fetch fresh for the "info" button, so it reflects reality
             ctx = self._fetch_ctx(instance_id)
             return {
                 "ctx": ctx,
@@ -429,7 +358,6 @@ class App(QWidget):
         if not instance_id:
             return
 
-        # TODO: replace this with settings taken from UI later
         settings = {"webhookUrl": ""}  # example payload
 
         reply = QMessageBox.question(
@@ -548,12 +476,15 @@ class App(QWidget):
         if not instance_id:
             return
 
-        params = self._ask_chat_history_params(self._last_chat_id or "", default_count=10)
-        if not params:
+        dlg = ChatHistoryDialog(self, chat_id_default=(self._last_chat_id or ""), count_default=10)
+        if dlg.exec() != QDialog.Accepted:
             self.output.setPlainText("Get Chat History cancelled.")
             return
 
-        chat_id, count = params
+        chat_id, count = dlg.values()
+        if not chat_id:
+            self.output.setPlainText("Get Chat History cancelled (empty chatId).")
+            return
 
         def work():
             return self._with_ctx(
@@ -569,12 +500,15 @@ class App(QWidget):
         if not instance_id:
             return
 
-        params = self._ask_get_message_params(self._last_chat_id or "")
-        if not params:
+        dlg = GetMessageDialog(self, chat_id_default=(self._last_chat_id or ""))
+        if dlg.exec() != QDialog.Accepted:
             self.output.setPlainText("Get Message cancelled.")
             return
 
-        chat_id, id_message = params
+        chat_id, id_message = dlg.values()
+        if not chat_id or not id_message:
+            self.output.setPlainText("Get Message cancelled (missing fields).")
+            return
 
         def work():
             return self._with_ctx(
@@ -651,6 +585,7 @@ class App(QWidget):
             )
 
         self._run_async("Fetching Webhook Count…", work)
+
 
 if __name__ == "__main__":
     app = QApplication([])
