@@ -589,9 +589,9 @@ class App(QWidget):
 
 if __name__ == "__main__":
     app = QApplication([])
-    with open(resource_path("ui/styles.qss"), "r", encoding="utf-8") as f:
+    with open(resource_path("../ui/styles.qss"), "r", encoding="utf-8") as f:
         app.setStyleSheet(f.read())
-    app.setWindowIcon(QIcon(resource_path("ui/greenapiicon.ico")))
+    app.setWindowIcon(QIcon(resource_path("../ui/greenapiicon.ico")))
     w = App()
     w.resize(750, 600)
     w.show()
