@@ -399,7 +399,7 @@ class App(QtWidgets.QWidget):
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: set_instance_settings(api_url, instance_id, api_token, settings),
+                lambda api_url, api_token: ga.set_instance_settings(api_url, instance_id, api_token, settings),
             )
 
         self._run_async("Applying Instance Settings…", work)
