@@ -1,18 +1,11 @@
-import sys, time, json, traceback
-from pathlib import Path
-from app.version import __version__
+import time, json, traceback
 from PySide6 import QtGui, QtCore, QtWidgets
+from app.version import __version__
+from app.resources import resource_path
 from app.ui_dialogs import QrCodeDialog, ask_get_message, ask_chat_history, ask_status_statistic
 from greenapi.elk_auth import get_api_token
 from greenapi.api_url_resolver import resolve_api_url
 import greenapi.client as ga
-
-# ---------- Resource Path Helper ---------- #
-
-def resource_path(relative_path: str) -> str:
-    # When running as a PyInstaller onefile exe, files live under sys._MEIPASS
-    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-    return str(base / relative_path)
 
 class Worker(QtCore.QObject):
     finished = QtCore.Signal()
@@ -631,6 +624,7 @@ class App(QtWidgets.QWidget):
         self._run_async("Fetching Webhook Count…", work)
 
     # ---------- Status Calls Buttons ---------- #
+
     def run_get_incoming_statuses(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
