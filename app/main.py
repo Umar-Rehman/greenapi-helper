@@ -19,17 +19,17 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QMessageBox,
     QTabWidget,
-    QDialog
 )
- 
-from app.ui_dialogs import ChatHistoryDialog, GetMessageDialog
-
+from app.ui_dialogs import QrCodeDialog, ask_get_message, ask_chat_history, ask_status_statistic
 from greenapi.elk_auth import get_api_token
 from greenapi.api_url_resolver import resolve_api_url
 from greenapi.client import (
     get_instance_settings,
     set_instance_settings,
     get_instance_state,
+    reboot_instance,
+    logout_instance,
+    get_qr_code,
     get_incoming_msgs_journal,
     get_outgoing_msgs_journal,
     get_chat_history,
@@ -38,8 +38,9 @@ from greenapi.client import (
     get_msg_queue,
     clear_msg_queue_to_send,
     get_webhook_count,
-    reboot_instance,
-    logout_instance,
+    get_incoming_statuses,
+    get_outgoing_statuses,
+    get_status_statistic,
 )
 
 # ---------- Resource Path Helper ---------- #
@@ -48,7 +49,6 @@ def resource_path(relative_path: str) -> str:
     # When running as a PyInstaller onefile exe, files live under sys._MEIPASS
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return str(base / relative_path)
-
 
 class Worker(QObject):
     finished = Signal()
@@ -68,7 +68,6 @@ class Worker(QObject):
             self.error.emit(traceback.format_exc())
         finally:
             self.finished.emit()
-
 
 class App(QWidget):
     def __init__(self):
@@ -114,6 +113,10 @@ class App(QWidget):
         self.reboot_button.setProperty("actionType", "danger")
         account_layout.addWidget(self.reboot_button)
 
+        self.get_qr_button = QPushButton("Get QR Code")
+        self.get_qr_button.clicked.connect(self.run_get_qr_code)
+        account_layout.addWidget(self.get_qr_button)
+
         account_layout.addStretch(1)
         tabs.addTab(account_tab, "Account")
 
@@ -142,7 +145,7 @@ class App(QWidget):
         journals_layout.addStretch(1)
         tabs.addTab(journals_tab, "Journals")
 
-        # ----- Queue tab -----
+        # ----- Queues tab -----
         queue_tab = QWidget()
         queue_layout = QVBoxLayout(queue_tab)
 
@@ -164,11 +167,31 @@ class App(QWidget):
         queue_layout.addWidget(self.webhook_count_button)
 
         queue_layout.addStretch(1)
-        tabs.addTab(queue_tab, "Queue")
+        tabs.addTab(queue_tab, "Queues")
+
+        # ----- Statuses tab -----
+        status_tab = QWidget()
+        status_layout = QVBoxLayout(status_tab)
+
+        self.incoming_status_button = QPushButton("Get Incoming Statuses")
+        self.incoming_status_button.clicked.connect(self.run_get_incoming_statuses)
+        status_layout.addWidget(self.incoming_status_button)
+
+        self.outgoing_status_button = QPushButton("Get Outgoing Statuses")
+        self.outgoing_status_button.clicked.connect(self.run_get_outgoing_statuses)
+        status_layout.addWidget(self.outgoing_status_button)
+
+        self.status_stat_button = QPushButton("Get Status Statistic")
+        self.status_stat_button.clicked.connect(self.run_get_status_statistic)
+        status_layout.addWidget(self.status_stat_button)
+        
+        status_layout.addStretch(1)
+        tabs.addTab(status_tab, "Statuses")
+
 
         root.addWidget(tabs)
 
-        # Output area (shared across all tabs)
+        # Output area
         self.output = QTextEdit()
         self.output.setReadOnly(True)
         root.addWidget(self.output)
@@ -179,19 +202,58 @@ class App(QWidget):
 
     @Slot(object)
     def _on_worker_result(self, payload):
-        # payload can be a string OR dict {"ctx":..., "result":...} / {"ctx":..., "error":...}
-        if isinstance(payload, dict) and "ctx" in payload:
-            self._ctx = payload["ctx"]
-
-            if "error" in payload:
-                self.output.setPlainText(str(payload["error"]))
-                return
-
-            self.output.setPlainText(self._pretty_print(payload.get("result", "")))
+        if not (isinstance(payload, dict) and "ctx" in payload):
+            self.output.setPlainText(self._pretty_print(payload))
             return
 
-        # fallback: plain text
-        self.output.setPlainText(self._pretty_print(str(payload)))
+        self._ctx = payload["ctx"]
+
+        if "error" in payload:
+            self.output.setPlainText(str(payload["error"]))
+            return
+
+        result = payload.get("result", "")
+
+        data = result
+        if isinstance(result, str):
+            s = result.strip()
+            if s.startswith("{") or s.startswith("["):
+                try:
+                    data = json.loads(s)
+                except Exception:
+                    self.output.setPlainText(self._pretty_print(result))
+                    return
+
+        # Handle QR only for known QR response types
+        if isinstance(data, dict):
+            t = data.get("type")
+            msg = data.get("message", "")
+
+            if t in {"alreadyLogged", "error", "qrCode"}:
+                instance_id = self._ctx.get("instance_id", "")
+                api_token = self._ctx.get("api_token", "")
+                qr_link = f"https://qr.green-api.com/wainstance{instance_id}/{api_token}"
+
+                if t == "alreadyLogged":
+                    self.output.setPlainText(
+                        "Instance is already authorised.\n"
+                        "To get a new QR code, first run Logout.\n\n"
+                        f"QR link:\n{qr_link}"
+                    )
+                    return
+
+                if t == "error":
+                    self.output.setPlainText(f"QR error:\n{msg}\n\nQR link:\n{qr_link}")
+                    return
+
+                if t == "qrCode":
+                    dlg = QrCodeDialog(link=qr_link, qr_base64=msg, parent=self)
+                    dlg.exec()
+                    self.output.setPlainText(f"QR ready.\n\n{qr_link}")
+                    return
+
+        # Fallback for everything else
+        self.output.setPlainText(self._pretty_print(data))
 
     @Slot(str)
     def _on_worker_error(self, err: str):
@@ -443,6 +505,19 @@ class App(QWidget):
 
         self._run_async("Rebooting instance…", work)
 
+    def run_get_qr_code(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_qr_code(api_url, instance_id, api_token),
+            )
+
+        self._run_async("Fetching QR code…", work)
+
     # ---------- Journals Calls Buttons ---------- #
 
     def run_get_incoming_msgs_journal(self):
@@ -476,20 +551,23 @@ class App(QWidget):
         if not instance_id:
             return
 
-        dlg = ChatHistoryDialog(self, chat_id_default=(self._last_chat_id or ""), count_default=10)
-        if dlg.exec() != QDialog.Accepted:
+        params = ask_chat_history(
+            self,
+            chat_id_default=(self._last_chat_id or ""),
+            count_default=10,
+        )
+        if not params:
             self.output.setPlainText("Get Chat History cancelled.")
             return
 
-        chat_id, count = dlg.values()
-        if not chat_id:
-            self.output.setPlainText("Get Chat History cancelled (empty chatId).")
-            return
+        chat_id, count = params
 
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_chat_history(api_url, instance_id, api_token, chat_id, count),
+                lambda api_url, api_token: get_chat_history(
+                    api_url, instance_id, api_token, chat_id, count
+                ),
             )
 
         self._last_chat_id = chat_id
@@ -500,20 +578,22 @@ class App(QWidget):
         if not instance_id:
             return
 
-        dlg = GetMessageDialog(self, chat_id_default=(self._last_chat_id or ""))
-        if dlg.exec() != QDialog.Accepted:
+        params = ask_get_message(
+            self,
+            chat_id_default=(self._last_chat_id or ""),
+        )
+        if not params:
             self.output.setPlainText("Get Message cancelled.")
             return
 
-        chat_id, id_message = dlg.values()
-        if not chat_id or not id_message:
-            self.output.setPlainText("Get Message cancelled (missing fields).")
-            return
+        chat_id, id_message = params
 
         def work():
             return self._with_ctx(
                 instance_id,
-                lambda api_url, api_token: get_message(api_url, instance_id, api_token, chat_id, id_message),
+                lambda api_url, api_token: get_message(
+                    api_url, instance_id, api_token, chat_id, id_message
+                ),
             )
 
         self._last_chat_id = chat_id
@@ -586,6 +666,50 @@ class App(QWidget):
 
         self._run_async("Fetching Webhook Count…", work)
 
+    # ---------- Status Calls Buttons ---------- #
+    def run_get_incoming_statuses(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_incoming_statuses(api_url, instance_id, api_token, minutes=1440),
+            )
+
+        self._run_async("Fetching Incoming Statuses…", work)
+
+    def run_get_outgoing_statuses(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_outgoing_statuses(api_url, instance_id, api_token, minutes=1440),
+            )
+
+        self._run_async("Fetching Outgoing Statuses…", work)
+
+    def run_get_status_statistic(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        id_message = ask_status_statistic(self)
+        if not id_message:
+            self.output.setPlainText("Get Status Statistic cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: get_status_statistic(api_url, instance_id, api_token, id_message),
+            )
+
+        self._run_async(f"Fetching Status Statistic for {id_message}…", work)
 
 if __name__ == "__main__":
     app = QApplication([])

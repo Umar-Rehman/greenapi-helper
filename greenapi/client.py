@@ -1,5 +1,6 @@
 import requests
 from pathlib import Path
+from urllib.parse import urlencode
 
 # --------- Configuration ---------- #
 
@@ -52,6 +53,10 @@ def reboot_instance(api_url: str, instance_id: str, api_token: str) -> str:
     url = _build_url(api_url, instance_id, f"reboot/{api_token}")
     return send_request("GET", url)
 
+def get_qr_code(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"qr/{api_token}")
+    return send_request("GET", url)
+
 # ---------- Journal Calls ---------- #
 
 def get_incoming_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
@@ -88,4 +93,19 @@ def clear_msg_queue_to_send(api_url: str, instance_id: str, api_token: str) -> s
 
 def get_webhook_count(api_url: str, instance_id: str, api_token: str) -> str:
     url = _build_url(api_url, instance_id, f"getWebhooksCount/{api_token}")
+    return send_request("GET", url)
+
+# ---------- Status Calls ---------- #
+
+def get_outgoing_statuses(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
+    url = _build_url(api_url, instance_id, f"getOutgoingStatuses/{api_token}?minutes={minutes}")
+    return send_request("GET", url)
+
+def get_incoming_statuses(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
+    url = _build_url(api_url, instance_id, f"getIncomingStatuses/{api_token}?minutes={minutes}")
+    return send_request("GET", url)
+
+def get_status_statistic(api_url: str, instance_id: str, api_token: str, id_message: str) -> str:
+    qs = urlencode({"idMessage": id_message})
+    url = _build_url(api_url, instance_id, f"getStatusStatistic/{api_token}?{qs}")
     return send_request("GET", url)
