@@ -127,6 +127,11 @@ class App(QtWidgets.QWidget):
         self.webhook_count_button.clicked.connect(self.run_get_webhook_count)
         queue_layout.addWidget(self.webhook_count_button)
 
+        self.webhook_delete_button = QtWidgets.QPushButton("Delete Incoming Webhooks")
+        self.webhook_delete_button.clicked.connect(self.run_clear_webhooks)
+        self.webhook_delete_button.setProperty("actionType", "danger")
+        queue_layout.addWidget(self.webhook_delete_button)
+
         queue_layout.addStretch(1)
         tabs.addTab(queue_tab, "Queues")
 
@@ -489,7 +494,7 @@ class App(QtWidgets.QWidget):
                 instance_id,
                 lambda api_url, api_token: ga.get_wa_settings(api_url, instance_id, api_token),
             )
-            if output is not dict:
+            if not isinstance(output, dict):
                 output = "WhatsApp account not found. This instance may be for another service. You can check the typeInstance with the Get Instance Settings button." 
             return output
 
@@ -612,7 +617,7 @@ class App(QtWidgets.QWidget):
         reply = QtWidgets.QMessageBox.question(
             self,
             "Confirm Clear Message Queue",
-            f"Are you sure you want to clear the message queue to send for instance {instance_id}?\n\nThis will delete all queued messages.",
+            f"Are you sure you want to clear the message queue to send for instance {instance_id}?\n\nThis will delete ALL queued messages.",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
         )
         if reply != QtWidgets.QMessageBox.Yes:
@@ -642,6 +647,51 @@ class App(QtWidgets.QWidget):
             )
 
         self._run_async("Fetching Webhook Count...", work)
+
+    def run_clear_webhooks(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+        
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Confirm Clear Webhooks Queue",
+            f"Are you sure you want to clear the incoming webhooks queue for instance {instance_id}?\n\nThis will delete ALL queued incoming webhooks.",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            self.output.setPlainText("CLearing webhooks queue cancelled.")
+            return
+        
+        def work():
+            payload = self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.clear_webhooks_queue(api_url, instance_id, api_token),
+            )
+
+            if not isinstance(payload, dict) or "result" not in payload:
+                return payload
+
+            raw = payload["result"]
+
+            if isinstance(raw, str):
+                try:
+                    raw = json.loads(raw)
+                except Exception:
+                    payload["result"] = f"Unexpected response:\n{raw}"
+                    return payload
+
+            if isinstance(raw, dict) and raw.get("isCleared") is True:
+                payload["result"] = "Webhook queue cleared successfully."
+            else:
+                reason = ""
+                if isinstance(raw, dict):
+                    reason = raw.get("reason", "")
+                payload["result"] = f"Webhook queue could not be cleared.\n\n{reason}"
+
+            return payload
+
+        self._run_async("Clearing Incoming Webhook Queue...", work)
 
     # ---------- Status Calls Buttons ---------- #
 

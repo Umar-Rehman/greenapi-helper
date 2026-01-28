@@ -105,6 +105,10 @@ def get_webhook_count(api_url: str, instance_id: str, api_token: str) -> str:
     url = _build_url(api_url, instance_id, f"getWebhooksCount/{api_token}")
     return send_request("GET", url)
 
+def clear_webhooks_queue(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"clearWebhooksQueue/{api_token}")
+    return send_request("DELETE", url)
+
 # ---------- Status Calls ---------- #
 
 def get_outgoing_statuses(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
