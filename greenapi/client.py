@@ -57,6 +57,10 @@ def get_qr_code(api_url: str, instance_id: str, api_token: str) -> str:
     url = _build_url(api_url, instance_id, f"qr/{api_token}")
     return send_request("GET", url)
 
+def get_wa_settings(api_url: str, instance_id: str, api_token: str) -> str:
+    url = _build_url(api_url, instance_id, f"getWASettings/{api_token}")
+    return send_request("GET", url)
+
 # ---------- Journal Calls ---------- #
 
 def get_incoming_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
