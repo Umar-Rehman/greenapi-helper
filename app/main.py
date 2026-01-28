@@ -485,11 +485,14 @@ class App(QtWidgets.QWidget):
             return
         
         def work():
-            return self._with_ctx(
+            output = self._with_ctx(
                 instance_id,
                 lambda api_url, api_token: ga.get_wa_settings(api_url, instance_id, api_token),
             )
-        
+            if output is not dict:
+                output = "WhatsApp account not found. This instance may be for another service. You can check the typeInstance with the Get Instance Settings button." 
+            return output
+
         self._run_async("Fetching WhatsApp settings...", work)
 
     # ---------- Journals Calls Buttons ---------- #
