@@ -60,6 +60,14 @@ class App(QtWidgets.QWidget):
         self.settings_button.clicked.connect(self.run_get_instance_settings)
         account_layout.addWidget(self.settings_button)
 
+        self.get_wa_settings_button = QtWidgets.QPushButton("Get WhatsApp Settings")
+        self.get_wa_settings_button.clicked.connect(self.run_get_wa_settings)
+        account_layout.addWidget(self.get_wa_settings_button)
+        
+        self.get_qr_button = QtWidgets.QPushButton("Get QR Code")
+        self.get_qr_button.clicked.connect(self.run_get_qr_code)
+        account_layout.addWidget(self.get_qr_button)
+
         self.logout_button = QtWidgets.QPushButton("Logout Instance")
         self.logout_button.clicked.connect(self.run_logout_instance)
         self.logout_button.setProperty("actionType", "danger")
@@ -69,10 +77,6 @@ class App(QtWidgets.QWidget):
         self.reboot_button.clicked.connect(self.run_reboot_instance)
         self.reboot_button.setProperty("actionType", "danger")
         account_layout.addWidget(self.reboot_button)
-
-        self.get_qr_button = QtWidgets.QPushButton("Get QR Code")
-        self.get_qr_button.clicked.connect(self.run_get_qr_code)
-        account_layout.addWidget(self.get_qr_button)
 
         account_layout.addStretch(1)
         tabs.addTab(account_tab, "Account")
@@ -357,7 +361,7 @@ class App(QtWidgets.QWidget):
                 ),
             }
 
-        self._run_async("Fetching information…", work)
+        self._run_async("Fetching information...", work)
 
     def run_get_instance_state(self):
         instance_id = self._get_instance_id_or_warn()
@@ -370,7 +374,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_instance_state(api_url, instance_id, api_token),
             )
 
-        self._run_async("Fetching Instance State…", work)
+        self._run_async("Fetching Instance State...", work)
 
     def run_set_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -395,7 +399,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.set_instance_settings(api_url, instance_id, api_token, settings),
             )
 
-        self._run_async("Applying Instance Settings…", work)
+        self._run_async("Applying Instance Settings...", work)
 
     def run_get_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -408,7 +412,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_instance_settings(api_url, instance_id, api_token),
             )
 
-        self._run_async("Fetching Instance Settings…", work)
+        self._run_async("Fetching Instance Settings...", work)
 
     def run_logout_instance(self):
         instance_id = self._get_instance_id_or_warn()
@@ -434,7 +438,7 @@ class App(QtWidgets.QWidget):
                 payload["result"] = "Logout successful."
             return payload
 
-        self._run_async("Logging out instance…", work)
+        self._run_async("Logging out instance...", work)
 
     def run_reboot_instance(self):
         instance_id = self._get_instance_id_or_warn()
@@ -460,7 +464,7 @@ class App(QtWidgets.QWidget):
                 payload["result"] = "Reboot successful."
             return payload
 
-        self._run_async("Rebooting instance…", work)
+        self._run_async("Rebooting instance...", work)
 
     def run_get_qr_code(self):
         instance_id = self._get_instance_id_or_warn()
@@ -473,7 +477,23 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_qr_code(api_url, instance_id, api_token),
             )
 
-        self._run_async("Fetching QR code…", work)
+        self._run_async("Fetching QR code...", work)
+
+    def run_get_wa_settings(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+        
+        def work():
+            output = self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.get_wa_settings(api_url, instance_id, api_token),
+            )
+            if output is not dict:
+                output = "WhatsApp account not found. This instance may be for another service. You can check the typeInstance with the Get Instance Settings button." 
+            return output
+
+        self._run_async("Fetching WhatsApp settings...", work)
 
     # ---------- Journals Calls Buttons ---------- #
 
@@ -488,7 +508,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_incoming_msgs_journal(api_url, instance_id, api_token, minutes=1440),
             )
 
-        self._run_async("Fetching Incoming Messages Journal…", work)
+        self._run_async("Fetching Incoming Messages Journal...", work)
 
     def run_get_outgoing_msgs_journal(self):
         instance_id = self._get_instance_id_or_warn()
@@ -501,7 +521,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_outgoing_msgs_journal(api_url, instance_id, api_token, minutes=1440),
             )
 
-        self._run_async("Fetching Outgoing Messages Journal…", work)
+        self._run_async("Fetching Outgoing Messages Journal...", work)
 
     def run_get_chat_history(self):
         instance_id = self._get_instance_id_or_warn()
@@ -528,7 +548,7 @@ class App(QtWidgets.QWidget):
             )
 
         self._last_chat_id = chat_id
-        self._run_async(f"Fetching Chat History for {chat_id}…", work)
+        self._run_async(f"Fetching Chat History for {chat_id}...", work)
 
     def run_get_message(self):
         instance_id = self._get_instance_id_or_warn()
@@ -554,7 +574,7 @@ class App(QtWidgets.QWidget):
             )
 
         self._last_chat_id = chat_id
-        self._run_async(f"Fetching Message {id_message}…", work)
+        self._run_async(f"Fetching Message {id_message}...", work)
 
     # ---------- Queue Calls Buttons ---------- #
 
@@ -569,7 +589,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_msg_queue_count(api_url, instance_id, api_token),
             )
 
-        self._run_async("Fetching Message Queue Count…", work)
+        self._run_async("Fetching Message Queue Count...", work)
 
     def run_get_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
@@ -582,7 +602,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_msg_queue(api_url, instance_id, api_token),
             )
 
-        self._run_async("Fetching Messages Queued to Send…", work)
+        self._run_async("Fetching Messages Queued to Send...", work)
 
     def run_clear_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
@@ -608,7 +628,7 @@ class App(QtWidgets.QWidget):
                 payload["result"] = "Message queue cleared successfully."
             return payload
 
-        self._run_async("Clearing Message Queue to Send…", work)
+        self._run_async("Clearing Message Queue to Send...", work)
 
     def run_get_webhook_count(self):
         instance_id = self._get_instance_id_or_warn()
@@ -621,7 +641,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_webhook_count(api_url, instance_id, api_token),
             )
 
-        self._run_async("Fetching Webhook Count…", work)
+        self._run_async("Fetching Webhook Count...", work)
 
     # ---------- Status Calls Buttons ---------- #
 
@@ -636,7 +656,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_incoming_statuses(api_url, instance_id, api_token, minutes=1440),
             )
 
-        self._run_async("Fetching Incoming Statuses…", work)
+        self._run_async("Fetching Incoming Statuses...", work)
 
     def run_get_outgoing_statuses(self):
         instance_id = self._get_instance_id_or_warn()
@@ -649,7 +669,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_outgoing_statuses(api_url, instance_id, api_token, minutes=1440),
             )
 
-        self._run_async("Fetching Outgoing Statuses…", work)
+        self._run_async("Fetching Outgoing Statuses...", work)
 
     def run_get_status_statistic(self):
         instance_id = self._get_instance_id_or_warn()
@@ -667,7 +687,7 @@ class App(QtWidgets.QWidget):
                 lambda api_url, api_token: ga.get_status_statistic(api_url, instance_id, api_token, id_message),
             )
 
-        self._run_async(f"Fetching Status Statistic for {id_message}…", work)
+        self._run_async(f"Fetching Status Statistic for {id_message}...", work)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
