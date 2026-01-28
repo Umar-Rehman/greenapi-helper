@@ -88,22 +88,3 @@ def resolve_api_url(id_instance: str, prefer_direct: bool = True) -> str:
         host = host.rstrip("/") + rule.path_prefix
 
     return host
-
-
-# if __name__ == "__main__":
-#     #examples
-#     for example in ["7107348018", "1103123456", "9906123456", "3100123456", "7700123456"]:
-#         print(example, "->", resolve_api_url(example))
-
-
-# import requests
-
-# url = "https://3100.api.green-api.com/v3/waInstance3100465898/checkAccount/9e7ffa98508749aeac54038d08b7834349bfb9b238af460698"
-
-# payload = {
-#     "phoneNumber": 79991234567
-# }
-
-# response = requests.post(url, json=payload)
-
-# print(response.text.encode('utf8'))
