@@ -31,6 +31,12 @@ def send_request(method: str, url: str, *, json_body: dict | None = None) -> str
 
     return resp.text
 
+# Potential refactor for single call function that takes all parameters at button click (this will make most call functions below redundant)
+
+def make_api_call(api_url: str, instance_id: str, api_token: str, path: str, method: str) -> str:
+    url = _build_url(api_url, instance_id, f"{path}/{api_token}")
+    return send_request(method, url)
+
 # ---------- Account Calls ---------- #
 
 def get_instance_state(api_url: str, instance_id: str, api_token: str) -> str:
