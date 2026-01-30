@@ -53,6 +53,16 @@ class App(QtWidgets.QWidget):
             return self._with_ctx(instance_id, lambda api_url, api_token: api_func(api_url, instance_id, api_token))
         self._run_async(status_text, work)
 
+    def _confirm_action(self, title, message, cancel_message=None):
+        reply = QtWidgets.QMessageBox.question(
+            self, title, message, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            if cancel_message:
+                self.output.setPlainText(cancel_message)
+            return False
+        return True
+
     def _setup_ui(self):
         root = QtWidgets.QVBoxLayout()
 
@@ -419,14 +429,11 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        reply = QtWidgets.QMessageBox.question(
-            self,
+        if not self._confirm_action(
             "Confirm Logout",
             f"Are you sure you want to logout instance {instance_id}?\n\nThis will disconnect the WhatsApp session.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            self.output.setPlainText("Logout cancelled.")
+            "Logout cancelled."
+        ):
             return
 
         def work():
@@ -445,14 +452,11 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        reply = QtWidgets.QMessageBox.question(
-            self,
+        if not self._confirm_action(
             "Confirm Reboot",
             f"Are you sure you want to reboot instance {instance_id}?\n\nThis may interrupt message processing.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            self.output.setPlainText("Reboot cancelled.")
+            "Reboot cancelled."
+        ):
             return
 
         def work():
@@ -608,14 +612,11 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
         
-        reply = QtWidgets.QMessageBox.question(
-            self,
+        if not self._confirm_action(
             "Confirm Clear Webhooks Queue",
             f"Are you sure you want to clear the incoming webhooks queue for instance {instance_id}?\n\nThis will delete ALL queued incoming webhooks.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            self.output.setPlainText("CLearing webhooks queue cancelled.")
+            "Clearing webhooks queue cancelled."
+        ):
             return
         
         def work():
