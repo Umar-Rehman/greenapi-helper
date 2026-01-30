@@ -2,7 +2,7 @@ import time, json, traceback
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.version import __version__
 from app.resources import resource_path
-from app.ui_dialogs import QrCodeDialog, InstanceSettingsDialog, ask_get_message, ask_chat_history, ask_status_statistic
+from ui.dialogs import forms, instance_settings, qr
 from greenapi.elk_auth import get_api_token
 from greenapi.api_url_resolver import resolve_api_url
 import greenapi.client as ga
@@ -195,24 +195,26 @@ class App(QtWidgets.QWidget):
             except Exception:
                 settings_dict = {}
 
-            dlg = InstanceSettingsDialog(self, current=settings_dict)
-            if dlg.exec() != QtWidgets.QDialog.Accepted:
-                self.output.setPlainText("setSettings cancelled.")
-                return
+            while True:
+                dlg = instance_settings.InstanceSettingsDialog(self, current=settings_dict)
+                if dlg.exec() != QtWidgets.QDialog.Accepted:
+                    self.output.setPlainText("Set settings cancelled.")
+                    return
 
-            new_settings = dlg.payload()
+                new_settings = dlg.payload()
 
-            # confirm
-            reply = QtWidgets.QMessageBox.question(
-                self,
-                "Confirm Settings",
-                "Apply these settings to the instance?\n\n"
-                + json.dumps(new_settings, indent=2, ensure_ascii=False),
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            )
-            if reply != QtWidgets.QMessageBox.Yes:
-                self.output.setPlainText("setSettings cancelled.")
-                return
+                # confirm
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Confirm Settings",
+                    "Apply these settings to the instance?\n\n"
+                    + json.dumps(new_settings, indent=2, ensure_ascii=False),
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                )
+                if reply == QtWidgets.QMessageBox.Yes:
+                    break  # Proceed to apply settings
+
+                # If cancelled, loop back to show dialog again
 
             instance_id = self._ctx.get("instance_id", "")
 
@@ -274,7 +276,7 @@ class App(QtWidgets.QWidget):
                     return
 
                 if t == "qrCode":
-                    dlg = QrCodeDialog(link=qr_link, qr_base64=msg, parent=self)
+                    dlg = qr.QrCodeDialog(link=qr_link, qr_base64=msg, parent=self)
                     dlg.exec()
                     self.output.setPlainText(f"QR ready.\n\n{qr_link}")
                     return
@@ -590,7 +592,7 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        params = ask_chat_history(
+        params = forms.ask_chat_history(
             self,
             chat_id_default=(self._last_chat_id or ""),
             count_default=10,
@@ -617,7 +619,7 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        params = ask_get_message(
+        params = forms.ask_get_message(
             self,
             chat_id_default=(self._last_chat_id or ""),
         )
@@ -783,7 +785,7 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        id_message = ask_status_statistic(self)
+        id_message = forms.ask_status_statistic(self)
         if not id_message:
             self.output.setPlainText("Get Status Statistic cancelled.")
             return
