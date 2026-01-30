@@ -2,10 +2,11 @@ import time, json, traceback
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.version import __version__
 from app.resources import resource_path
-from app.ui_dialogs import QrCodeDialog, ask_get_message, ask_chat_history, ask_status_statistic
+from app.ui_dialogs import QrCodeDialog, InstanceSettingsDialog, ask_get_message, ask_chat_history, ask_status_statistic
 from greenapi.elk_auth import get_api_token
 from greenapi.api_url_resolver import resolve_api_url
 import greenapi.client as ga
+
 
 class Worker(QtCore.QObject):
     finished = QtCore.Signal()
@@ -59,6 +60,11 @@ class App(QtWidgets.QWidget):
         self.settings_button = QtWidgets.QPushButton("Get Instance Settings")
         self.settings_button.clicked.connect(self.run_get_instance_settings)
         account_layout.addWidget(self.settings_button)
+
+        self.set_settings_button = QtWidgets.QPushButton("Set Instance Settings")
+        self.set_settings_button.clicked.connect(self.run_set_instance_settings)
+        self.set_settings_button.setProperty("actionType", "post")
+        account_layout.addWidget(self.set_settings_button)
 
         self.get_wa_settings_button = QtWidgets.QPushButton("Get WhatsApp Settings")
         self.get_wa_settings_button.clicked.connect(self.run_get_wa_settings)
@@ -180,6 +186,61 @@ class App(QtWidgets.QWidget):
 
         result = payload.get("result", "")
 
+                # --- Open settings dialog flow ---
+        if isinstance(payload, dict) and payload.get("_ui_action") == "open_settings_dialog":
+            # Parse the settings JSON (API often returns a JSON string)
+            raw = payload.get("result", {})
+            try:
+                settings_dict = json.loads(raw) if isinstance(raw, str) else raw
+            except Exception:
+                settings_dict = {}
+
+            dlg = InstanceSettingsDialog(self, current=settings_dict)
+            if dlg.exec() != QtWidgets.QDialog.Accepted:
+                self.output.setPlainText("setSettings cancelled.")
+                return
+
+            new_settings = dlg.payload()
+
+            # confirm
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Confirm Settings",
+                "Apply these settings to the instance?\n\n"
+                + json.dumps(new_settings, indent=2, ensure_ascii=False),
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            )
+            if reply != QtWidgets.QMessageBox.Yes:
+                self.output.setPlainText("setSettings cancelled.")
+                return
+
+            instance_id = self._ctx.get("instance_id", "")
+
+            def work_apply():
+                payload = self._with_ctx(
+                    self._ctx.get("instance_id", ""),
+                    lambda api_url, api_token: ga.set_instance_settings(
+                        api_url, instance_id, api_token, new_settings
+                    ),
+                )
+
+                # Normalize success response
+                result = payload.get("result")
+
+                try:
+                    data = json.loads(result) if isinstance(result, str) else result
+                except Exception:
+                    data = None
+
+                if isinstance(data, dict) and data.get("saveSettings") is True:
+                    payload["result"] = "Settings applied successfully."
+
+                return payload
+
+
+            self._run_async("Applying settings…", work_apply)
+            return
+
         data = result
         if isinstance(result, str):
             s = result.strip()
@@ -238,8 +299,9 @@ class App(QtWidgets.QWidget):
         job = {"thread": thread, "worker": worker}
         self._jobs.append(job)
 
-        # Disable the clicked button
-        btn = self.sender()
+        # Disable the clicked button (only if this call was triggered by a QPushButton)
+        sender = self.sender()
+        btn = sender if isinstance(sender, QtWidgets.QPushButton) else None
         if btn is not None:
             btn.setEnabled(False)
 
@@ -381,31 +443,6 @@ class App(QtWidgets.QWidget):
 
         self._run_async("Fetching Instance State...", work)
 
-    def run_set_instance_settings(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        settings = {"webhookUrl": ""}  # example payload
-
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            "Confirm setSettings",
-            f"Apply settings to instance {instance_id}?\n\nThis changes instance configuration.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            self.output.setPlainText("setSettings cancelled.")
-            return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.set_instance_settings(api_url, instance_id, api_token, settings),
-            )
-
-        self._run_async("Applying Instance Settings...", work)
-
     def run_get_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
@@ -418,6 +455,26 @@ class App(QtWidgets.QWidget):
             )
 
         self._run_async("Fetching Instance Settings...", work)
+
+    def run_set_instance_settings(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # 1) Fetch current settings first (async)
+        def work_fetch():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.get_instance_settings(api_url, instance_id, api_token),
+            )
+
+        # we reuse the worker system, but we need to "tag" this result
+        def work_fetch_tagged():
+            payload = work_fetch()
+            payload["_ui_action"] = "open_settings_dialog"
+            return payload
+
+        self._run_async("Loading current settings…", work_fetch_tagged)
 
     def run_logout_instance(self):
         instance_id = self._get_instance_id_or_warn()
