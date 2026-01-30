@@ -103,6 +103,7 @@ class InstanceSettingsDialog(QDialog):
 
         self.delaySendMessagesMilliseconds = QSpinBox()
         self.delaySendMessagesMilliseconds.setRange(500, 600000)
+        self.delaySendMessagesMilliseconds.setSingleStep(100)
         self.delaySendMessagesMilliseconds.setValue(int(current.get("delaySendMessagesMilliseconds", 5000)))
         self.delaySendMessagesMilliseconds.setFixedWidth(140)
         grid.addWidget(label_cell("Queue send delay (ms)"), r, 0)

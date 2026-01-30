@@ -24,7 +24,6 @@ class ToggleSwitch(QCheckBox):
         self.setChecked(False)  # ensures offset matches initial state
         self.stateChanged.connect(self._start_anim)
 
-        # Make it compact; you can tweak
         self._w = 42
         self._h = 22
         self.setMinimumSize(self._w, self._h)

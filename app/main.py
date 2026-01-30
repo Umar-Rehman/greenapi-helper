@@ -734,6 +734,7 @@ if __name__ == "__main__":
         app.setStyleSheet(f.read())
     app.setWindowIcon(QtGui.QIcon(resource_path("../ui/greenapiicon.ico")))
     w = App()
+    w.setMinimumSize(600, 400)
     w.resize(750, 600)
     w.show()
     app.exec()
