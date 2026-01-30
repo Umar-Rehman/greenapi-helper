@@ -104,3 +104,53 @@ QPushButton[actionType="danger"]:hover {
 QPushButton[actionType="danger"]:pressed {
     background-color: #F5B5B5;
 }
+
+/* ---------- Scroll Bar (modern styling) ---------- */
+QScrollBar:vertical {
+    background: #F0F0F0;
+    width: 12px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical {
+    background: #C0C0C0;
+    border-radius: 6px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #A0A0A0;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    background: none;
+    border: none;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* ---------- Spin Box (up/down buttons) ---------- */
+QSpinBox {
+    background-color: white;
+    color: #111;
+    border: 1px solid #C7EBD1;
+    border-radius: 4px;
+    padding: 2px;
+}
+
+QSpinBox::up-button, QSpinBox::down-button {
+    background: #E8F6EE;
+    border: 1px solid #C7EBD1;
+    width: 16px;
+    border-radius: 2px;
+}
+
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background: #DDF2E6;
+}
+
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+    background: #C7EBD1;
+}

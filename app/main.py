@@ -2,7 +2,7 @@ import time, json, traceback
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.version import __version__
 from app.resources import resource_path
-from app.ui_dialogs import QrCodeDialog, InstanceSettingsDialog, ask_get_message, ask_chat_history, ask_status_statistic
+from ui.dialogs import forms, instance_settings, qr
 from greenapi.elk_auth import get_api_token
 from greenapi.api_url_resolver import resolve_api_url
 import greenapi.client as ga
@@ -28,149 +28,143 @@ class Worker(QtCore.QObject):
             self.finished.emit()
 
 class App(QtWidgets.QWidget):
+    """Main application window for the Green API Helper tool.
+
+    Provides a GUI interface to interact with Green API WhatsApp instances,
+    including account management, message handling, and settings configuration.
+    """
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"The Helper ({__version__})")
         self._ctx = None  # {"instance_id": str, "api_url": str, "api_token": str, "ts": float}
-        self._ctx_ttl_seconds = 10 * 60  # 10 minutes
+        self._ctx_ttl_seconds = 10 * 60
         self._last_chat_id = None
 
-        root = QtWidgets.QVBoxLayout()
+        self._setup_ui()
 
-        # Instance ID input
+    def _add_button(self, layout, text, handler, action_type=None):
+        """Add a QPushButton to the given layout with specified text and handler.
+
+        Args:
+            layout: The QLayout to add the button to.
+            text: The button's display text.
+            handler: The function to connect to the button's clicked signal.
+            action_type: Optional property to set on the button (e.g., 'danger').
+
+        Returns:
+            The created QPushButton instance.
+        """
+        button = QtWidgets.QPushButton(text)
+        button.clicked.connect(handler)
+        if action_type:
+            button.setProperty("actionType", action_type)
+        layout.addWidget(button)
+        return button
+
+    def _run_simple_api_call(self, status_text, api_func):
+        """Run a simple API call asynchronously with status feedback.
+
+        Args:
+            status_text: Text to display as the operation status.
+            api_func: The API function to call (should take api_url, instance_id, api_token).
+        """
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+        def work():
+            return self._with_ctx(instance_id, lambda api_url, api_token: api_func(api_url, instance_id, api_token))
+        self._run_async(status_text, work)
+
+    def _confirm_action(self, title, message, cancel_message=None):
+        """Show a confirmation dialog and return True if user confirms.
+
+        Args:
+            title: Dialog window title.
+            message: Confirmation message text.
+            cancel_message: Optional message to display in output if cancelled.
+
+        Returns:
+            True if user clicks Yes, False otherwise.
+        """
+        reply = QtWidgets.QMessageBox.question(
+            self, title, message, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            if cancel_message:
+                self.output.setPlainText(cancel_message)
+            return False
+        return True
+
+    def _setup_ui(self):
+        root = QtWidgets.QVBoxLayout()
+        self._create_instance_input(root)
+        self._create_tabs(root)
+        self._create_output_area(root)
+        self.setLayout(root)
+
+    def _create_instance_input(self, root):
         root.addWidget(QtWidgets.QLabel("Instance ID:"))
         self.instance_input = QtWidgets.QLineEdit()
         root.addWidget(self.instance_input)
 
-        # ---------------- Tabs ----------------
+    def _create_tabs(self, root):
         tabs = QtWidgets.QTabWidget()
+        self._create_account_tab(tabs)
+        self._create_journals_tab(tabs)
+        self._create_queues_tab(tabs)
+        self._create_statuses_tab(tabs)
+        root.addWidget(tabs)
 
-        # ----- Account tab -----
+    def _create_account_tab(self, tabs):
         account_tab = QtWidgets.QWidget()
         account_layout = QtWidgets.QVBoxLayout(account_tab)
-
-        self.button = QtWidgets.QPushButton("Get Instance Information (API Token / URL)")
-        self.button.clicked.connect(self.run_get_api_token)
-        account_layout.addWidget(self.button)
-
-        self.state_button = QtWidgets.QPushButton("Get Instance State")
-        self.state_button.clicked.connect(self.run_get_instance_state)
-        account_layout.addWidget(self.state_button)
-
-        self.settings_button = QtWidgets.QPushButton("Get Instance Settings")
-        self.settings_button.clicked.connect(self.run_get_instance_settings)
-        account_layout.addWidget(self.settings_button)
-
-        self.set_settings_button = QtWidgets.QPushButton("Set Instance Settings")
-        self.set_settings_button.clicked.connect(self.run_set_instance_settings)
-        self.set_settings_button.setProperty("actionType", "post")
-        account_layout.addWidget(self.set_settings_button)
-
-        self.get_wa_settings_button = QtWidgets.QPushButton("Get WhatsApp Settings")
-        self.get_wa_settings_button.clicked.connect(self.run_get_wa_settings)
-        account_layout.addWidget(self.get_wa_settings_button)
-        
-        self.get_qr_button = QtWidgets.QPushButton("Get QR Code")
-        self.get_qr_button.clicked.connect(self.run_get_qr_code)
-        account_layout.addWidget(self.get_qr_button)
-
-        self.logout_button = QtWidgets.QPushButton("Logout Instance")
-        self.logout_button.clicked.connect(self.run_logout_instance)
-        self.logout_button.setProperty("actionType", "danger")
-        account_layout.addWidget(self.logout_button)
-
-        self.reboot_button = QtWidgets.QPushButton("Reboot Instance")
-        self.reboot_button.clicked.connect(self.run_reboot_instance)
-        self.reboot_button.setProperty("actionType", "danger")
-        account_layout.addWidget(self.reboot_button)
-
+        self.button = self._add_button(account_layout, "Get Instance Information (API Token / URL)", self.run_get_api_token)
+        self.state_button = self._add_button(account_layout, "Get Instance State", self.run_get_instance_state)
+        self.settings_button = self._add_button(account_layout, "Get Instance Settings", self.run_get_instance_settings)
+        self.set_settings_button = self._add_button(account_layout, "Set Instance Settings", self.run_set_instance_settings, "post")
+        self.get_wa_settings_button = self._add_button(account_layout, "Get WhatsApp Settings", self.run_get_wa_settings)
+        self.get_qr_button = self._add_button(account_layout, "Get QR Code", self.run_get_qr_code)
+        self.logout_button = self._add_button(account_layout, "Logout Instance", self.run_logout_instance, "danger")
+        self.reboot_button = self._add_button(account_layout, "Reboot Instance", self.run_reboot_instance, "danger")
         account_layout.addStretch(1)
         tabs.addTab(account_tab, "Account")
 
-        # ----- Journals tab -----
+    def _create_journals_tab(self, tabs):
         journals_tab = QtWidgets.QWidget()
         journals_layout = QtWidgets.QVBoxLayout(journals_tab)
-
-        self.journal_button = QtWidgets.QPushButton("Get Incoming Messages Journal")
-        self.journal_button.clicked.connect(self.run_get_incoming_msgs_journal)
-        journals_layout.addWidget(self.journal_button)
-
-        self.outgoing_journal_button = QtWidgets.QPushButton("Get Outgoing Messages Journal")
-        self.outgoing_journal_button.clicked.connect(self.run_get_outgoing_msgs_journal)
-        journals_layout.addWidget(self.outgoing_journal_button)
-
-        self.chat_history_button = QtWidgets.QPushButton("Get Chat History")
-        self.chat_history_button.clicked.connect(self.run_get_chat_history)
-        self.chat_history_button.setProperty("actionType", "post")
-        journals_layout.addWidget(self.chat_history_button)
-
-        self.get_message_button = QtWidgets.QPushButton("Get Message")
-        self.get_message_button.clicked.connect(self.run_get_message)
-        self.get_message_button.setProperty("actionType", "post")
-        journals_layout.addWidget(self.get_message_button)
-
+        self.journal_button = self._add_button(journals_layout, "Get Incoming Messages Journal", self.run_get_incoming_msgs_journal)
+        self.outgoing_journal_button = self._add_button(journals_layout, "Get Outgoing Messages Journal", self.run_get_outgoing_msgs_journal)
+        self.chat_history_button = self._add_button(journals_layout, "Get Chat History", self.run_get_chat_history, "post")
+        self.get_message_button = self._add_button(journals_layout, "Get Message", self.run_get_message, "post")
         journals_layout.addStretch(1)
         tabs.addTab(journals_tab, "Journals")
 
-        # ----- Queues tab -----
+    def _create_queues_tab(self, tabs):
         queue_tab = QtWidgets.QWidget()
         queue_layout = QtWidgets.QVBoxLayout(queue_tab)
-
-        self.msg_count_button = QtWidgets.QPushButton("Get Message Queue Count")
-        self.msg_count_button.clicked.connect(self.run_get_msg_queue_count)
-        queue_layout.addWidget(self.msg_count_button)
-
-        self.msg_queue_button = QtWidgets.QPushButton("Get Messages Queued to Send")
-        self.msg_queue_button.clicked.connect(self.run_get_msg_queue)
-        queue_layout.addWidget(self.msg_queue_button)
-
-        self.clear_queue_button = QtWidgets.QPushButton("Clear Message Queue to Send")
-        self.clear_queue_button.clicked.connect(self.run_clear_msg_queue)
-        self.clear_queue_button.setProperty("actionType", "post")
-        queue_layout.addWidget(self.clear_queue_button)
-
-        self.webhook_count_button = QtWidgets.QPushButton("Get Webhook Count")
-        self.webhook_count_button.clicked.connect(self.run_get_webhook_count)
-        queue_layout.addWidget(self.webhook_count_button)
-
-        self.webhook_delete_button = QtWidgets.QPushButton("Delete Incoming Webhooks")
-        self.webhook_delete_button.clicked.connect(self.run_clear_webhooks)
-        self.webhook_delete_button.setProperty("actionType", "danger")
-        queue_layout.addWidget(self.webhook_delete_button)
-
+        self.msg_count_button = self._add_button(queue_layout, "Get Message Queue Count", self.run_get_msg_queue_count)
+        self.msg_queue_button = self._add_button(queue_layout, "Get Messages Queued to Send", self.run_get_msg_queue)
+        self.clear_queue_button = self._add_button(queue_layout, "Clear Message Queue to Send", self.run_clear_msg_queue, "post")
+        self.webhook_count_button = self._add_button(queue_layout, "Get Webhook Count", self.run_get_webhook_count)
+        self.webhook_delete_button = self._add_button(queue_layout, "Delete Incoming Webhooks", self.run_clear_webhooks, "danger")
         queue_layout.addStretch(1)
         tabs.addTab(queue_tab, "Queues")
 
-        # ----- Statuses tab -----
+    def _create_statuses_tab(self, tabs):
         status_tab = QtWidgets.QWidget()
         status_layout = QtWidgets.QVBoxLayout(status_tab)
-
-        self.incoming_status_button = QtWidgets.QPushButton("Get Incoming Statuses")
-        self.incoming_status_button.clicked.connect(self.run_get_incoming_statuses)
-        status_layout.addWidget(self.incoming_status_button)
-
-        self.outgoing_status_button = QtWidgets.QPushButton("Get Outgoing Statuses")
-        self.outgoing_status_button.clicked.connect(self.run_get_outgoing_statuses)
-        status_layout.addWidget(self.outgoing_status_button)
-
-        self.status_stat_button = QtWidgets.QPushButton("Get Status Statistic")
-        self.status_stat_button.clicked.connect(self.run_get_status_statistic)
-        status_layout.addWidget(self.status_stat_button)
-        
+        self.incoming_status_button = self._add_button(status_layout, "Get Incoming Statuses", self.run_get_incoming_statuses)
+        self.outgoing_status_button = self._add_button(status_layout, "Get Outgoing Statuses", self.run_get_outgoing_statuses)
+        self.status_stat_button = self._add_button(status_layout, "Get Status Statistic", self.run_get_status_statistic)
         status_layout.addStretch(1)
         tabs.addTab(status_tab, "Statuses")
 
-
-        root.addWidget(tabs)
-
-        # Output area
+    def _create_output_area(self, root):
         self.output = QtWidgets.QTextEdit()
         self.output.setReadOnly(True)
         root.addWidget(self.output)
 
-        self.setLayout(root)
-
-    # ---------- Worker handlers ---------- #
+    # Worker handlers
 
     @QtCore.Slot(object)
     def _on_worker_result(self, payload):
@@ -186,7 +180,7 @@ class App(QtWidgets.QWidget):
 
         result = payload.get("result", "")
 
-                # --- Open settings dialog flow ---
+        # Open settings dialog flow
         if isinstance(payload, dict) and payload.get("_ui_action") == "open_settings_dialog":
             # Parse the settings JSON (API often returns a JSON string)
             raw = payload.get("result", {})
@@ -195,24 +189,26 @@ class App(QtWidgets.QWidget):
             except Exception:
                 settings_dict = {}
 
-            dlg = InstanceSettingsDialog(self, current=settings_dict)
-            if dlg.exec() != QtWidgets.QDialog.Accepted:
-                self.output.setPlainText("setSettings cancelled.")
-                return
+            # Allow user to retry settings if confirmation is cancelled
+            while True:
+                dlg = instance_settings.InstanceSettingsDialog(self, current=settings_dict)
+                if dlg.exec() != QtWidgets.QDialog.Accepted:
+                    self.output.setPlainText("Set settings cancelled.")
+                    return
 
-            new_settings = dlg.payload()
+                new_settings = dlg.payload()
 
-            # confirm
-            reply = QtWidgets.QMessageBox.question(
-                self,
-                "Confirm Settings",
-                "Apply these settings to the instance?\n\n"
-                + json.dumps(new_settings, indent=2, ensure_ascii=False),
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            )
-            if reply != QtWidgets.QMessageBox.Yes:
-                self.output.setPlainText("setSettings cancelled.")
-                return
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Confirm Settings",
+                    "Apply these settings to the instance?\n\n"
+                    + json.dumps(new_settings, indent=2, ensure_ascii=False),
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                )
+                if reply == QtWidgets.QMessageBox.Yes:
+                    break  # Proceed to apply settings
+
+                # If cancelled, loop back to show dialog again
 
             instance_id = self._ctx.get("instance_id", "")
 
@@ -274,7 +270,7 @@ class App(QtWidgets.QWidget):
                     return
 
                 if t == "qrCode":
-                    dlg = QrCodeDialog(link=qr_link, qr_base64=msg, parent=self)
+                    dlg = qr.QrCodeDialog(link=qr_link, qr_base64=msg, parent=self)
                     dlg.exec()
                     self.output.setPlainText(f"QR ready.\n\n{qr_link}")
                     return
@@ -305,7 +301,7 @@ class App(QtWidgets.QWidget):
         if btn is not None:
             btn.setEnabled(False)
 
-        # --- signal wiring ---
+        # Signal connections
         worker.result.connect(self._on_worker_result, QtCore.Qt.QueuedConnection)
         worker.error.connect(self._on_worker_error, QtCore.Qt.QueuedConnection)
 
@@ -331,7 +327,7 @@ class App(QtWidgets.QWidget):
         thread.started.connect(worker.run)
         thread.start()
 
-    # ---------- Helpers ---------- #
+    # Helpers
 
     def _pretty_print(self, value) -> str:
         try:
@@ -350,6 +346,11 @@ class App(QtWidgets.QWidget):
             return str(value)
 
     def _get_instance_id_or_warn(self) -> str | None:
+        """Get the instance ID from the input field, or show a warning if empty.
+
+        Returns:
+            The instance ID string if valid, None otherwise.
+        """
         instance_id = self.instance_input.text().strip()
         if not instance_id:
             self.output.setPlainText("Please enter an Instance ID.")
@@ -410,7 +411,7 @@ class App(QtWidgets.QWidget):
         result = call_fn(api_url, token)
         return {"ctx": ctx, "result": result}
 
-    # ---------- Account Calls Buttons ---------- #
+    # API Methods
 
     def run_get_api_token(self):
         instance_id = self._get_instance_id_or_warn()
@@ -431,37 +432,17 @@ class App(QtWidgets.QWidget):
         self._run_async("Fetching information...", work)
 
     def run_get_instance_state(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_instance_state(api_url, instance_id, api_token),
-            )
-
-        self._run_async("Fetching Instance State...", work)
+        self._run_simple_api_call("Fetching Instance State...", ga.get_instance_state)
 
     def run_get_instance_settings(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_instance_settings(api_url, instance_id, api_token),
-            )
-
-        self._run_async("Fetching Instance Settings...", work)
+        self._run_simple_api_call("Fetching Instance Settings...", ga.get_instance_settings)
 
     def run_set_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
 
-        # 1) Fetch current settings first (async)
+        # Fetch current settings first (async)
         def work_fetch():
             return self._with_ctx(
                 instance_id,
@@ -481,14 +462,11 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        reply = QtWidgets.QMessageBox.question(
-            self,
+        if not self._confirm_action(
             "Confirm Logout",
             f"Are you sure you want to logout instance {instance_id}?\n\nThis will disconnect the WhatsApp session.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            self.output.setPlainText("Logout cancelled.")
+            "Logout cancelled."
+        ):
             return
 
         def work():
@@ -507,14 +485,11 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        reply = QtWidgets.QMessageBox.question(
-            self,
+        if not self._confirm_action(
             "Confirm Reboot",
             f"Are you sure you want to reboot instance {instance_id}?\n\nThis may interrupt message processing.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            self.output.setPlainText("Reboot cancelled.")
+            "Reboot cancelled."
+        ):
             return
 
         def work():
@@ -529,17 +504,7 @@ class App(QtWidgets.QWidget):
         self._run_async("Rebooting instance...", work)
 
     def run_get_qr_code(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_qr_code(api_url, instance_id, api_token),
-            )
-
-        self._run_async("Fetching QR code...", work)
+        self._run_simple_api_call("Fetching QR code...", ga.get_qr_code)
 
     def run_get_wa_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -557,7 +522,7 @@ class App(QtWidgets.QWidget):
 
         self._run_async("Fetching WhatsApp settings...", work)
 
-    # ---------- Journals Calls Buttons ---------- #
+    # Journal API methods
 
     def run_get_incoming_msgs_journal(self):
         instance_id = self._get_instance_id_or_warn()
@@ -590,7 +555,7 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        params = ask_chat_history(
+        params = forms.ask_chat_history(
             self,
             chat_id_default=(self._last_chat_id or ""),
             count_default=10,
@@ -617,7 +582,7 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        params = ask_get_message(
+        params = forms.ask_get_message(
             self,
             chat_id_default=(self._last_chat_id or ""),
         )
@@ -638,33 +603,13 @@ class App(QtWidgets.QWidget):
         self._last_chat_id = chat_id
         self._run_async(f"Fetching Message {id_message}...", work)
 
-    # ---------- Queue Calls Buttons ---------- #
+    # Queue API methods
 
     def run_get_msg_queue_count(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_msg_queue_count(api_url, instance_id, api_token),
-            )
-
-        self._run_async("Fetching Message Queue Count...", work)
+        self._run_simple_api_call("Fetching Message Queue Count...", ga.get_msg_queue_count)
 
     def run_get_msg_queue(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_msg_queue(api_url, instance_id, api_token),
-            )
-
-        self._run_async("Fetching Messages Queued to Send...", work)
+        self._run_simple_api_call("Fetching Messages Queued to Send...", ga.get_msg_queue)
 
     def run_clear_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
@@ -693,31 +638,18 @@ class App(QtWidgets.QWidget):
         self._run_async("Clearing Message Queue to Send...", work)
 
     def run_get_webhook_count(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_webhook_count(api_url, instance_id, api_token),
-            )
-
-        self._run_async("Fetching Webhook Count...", work)
+        self._run_simple_api_call("Fetching Webhook Count...", ga.get_webhook_count)
 
     def run_clear_webhooks(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
         
-        reply = QtWidgets.QMessageBox.question(
-            self,
+        if not self._confirm_action(
             "Confirm Clear Webhooks Queue",
             f"Are you sure you want to clear the incoming webhooks queue for instance {instance_id}?\n\nThis will delete ALL queued incoming webhooks.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            self.output.setPlainText("CLearing webhooks queue cancelled.")
+            "Clearing webhooks queue cancelled."
+        ):
             return
         
         def work():
@@ -750,7 +682,7 @@ class App(QtWidgets.QWidget):
 
         self._run_async("Clearing Incoming Webhook Queue...", work)
 
-    # ---------- Status Calls Buttons ---------- #
+    # Status API methods
 
     def run_get_incoming_statuses(self):
         instance_id = self._get_instance_id_or_warn()
@@ -783,7 +715,7 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
 
-        id_message = ask_status_statistic(self)
+        id_message = forms.ask_status_statistic(self)
         if not id_message:
             self.output.setPlainText("Get Status Statistic cancelled.")
             return
@@ -802,6 +734,7 @@ if __name__ == "__main__":
         app.setStyleSheet(f.read())
     app.setWindowIcon(QtGui.QIcon(resource_path("../ui/greenapiicon.ico")))
     w = App()
+    w.setMinimumSize(600, 400)
     w.resize(750, 600)
     w.show()
     app.exec()
