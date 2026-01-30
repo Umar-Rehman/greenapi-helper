@@ -18,7 +18,7 @@ from PySide6.QtCore import Qt
 
 from app.widgets import ToggleSwitch
 
-# ---------- helpers ----------
+# Helpers
 
 def _to_yesno(value) -> str:
     if isinstance(value, str):
@@ -26,7 +26,7 @@ def _to_yesno(value) -> str:
     return "yes" if bool(value) else "no"
 
 
-# ---------- metadata ----------
+# Metadata
 
 _SETTINGS = [
     ("markIncomingMessagesReaded", "Mark incoming messages as read"),

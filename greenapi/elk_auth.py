@@ -12,7 +12,7 @@ CLIENT_KEY = "client.key"
 SEARCH_SIZE = 50
 TIME_GTE = "now-7d"
 
-# ---------- Helper Functions ---------- #
+# Helper functions
 
 def get_api_token(instance_id: str) -> str:
     """

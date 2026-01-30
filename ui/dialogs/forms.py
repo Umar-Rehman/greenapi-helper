@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# ---------- Field specs ----------
+# Field specifications
 
 @dataclass
 class TextField:
@@ -39,7 +39,7 @@ class IntField:
 FieldSpec = TextField | IntField
 
 
-# ---------- Generic form dialog ----------
+# Form dialog
 
 class FormDialog(QDialog):
     """
@@ -127,7 +127,7 @@ class FormDialog(QDialog):
         return out
 
 
-# ---------- Convenience wrappers ----------
+# Convenience functions
 
 def ask_chat_history(parent: QWidget, *, chat_id_default: str = "", count_default: int = 10):
     dlg = FormDialog(
