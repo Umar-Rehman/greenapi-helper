@@ -1,10 +1,13 @@
-import time, json, traceback
+import time, json, traceback, os
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.version import __version__
 from app.resources import resource_path
 from ui.dialogs import forms, instance_settings, qr
-from greenapi.elk_auth import get_api_token
+from ui.dialogs.cert_selector import CertificateSelectorDialog
+from ui.dialogs.kibana_login import KibanaLoginDialog
+from greenapi.elk_auth import get_api_token, get_kibana_session_cookie_with_password
 from greenapi.api_url_resolver import resolve_api_url
+from greenapi.credentials import get_credential_manager
 import greenapi.client as ga
 
 
@@ -71,6 +74,11 @@ class App(QtWidgets.QWidget):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
+        
+        # Ensure authentication in main thread before async work
+        if not self._ensure_authentication():
+            return
+            
         def work():
             return self._with_ctx(instance_id, lambda api_url, api_token: api_func(api_url, instance_id, api_token))
         self._run_async(status_text, work)
@@ -98,6 +106,7 @@ class App(QtWidgets.QWidget):
     def _setup_ui(self):
         root = QtWidgets.QVBoxLayout()
         self._create_instance_input(root)
+        self._create_reauthenticate_button(root)
         self._create_tabs(root)
         self._create_output_area(root)
         self.setLayout(root)
@@ -106,6 +115,12 @@ class App(QtWidgets.QWidget):
         root.addWidget(QtWidgets.QLabel("Instance ID:"))
         self.instance_input = QtWidgets.QLineEdit()
         root.addWidget(self.instance_input)
+    
+    def _create_reauthenticate_button(self, root):
+        reauth_btn = QtWidgets.QPushButton("🔑 Re-authenticate Kibana Session")
+        reauth_btn.clicked.connect(self._reauthenticate_kibana)
+        reauth_btn.setToolTip("Clear current session and re-authenticate with Kibana")
+        root.addWidget(reauth_btn)
 
     def _create_tabs(self, root):
         tabs = QtWidgets.QTabWidget()
@@ -237,45 +252,27 @@ class App(QtWidgets.QWidget):
             self._run_async("Applying settings…", work_apply)
             return
 
+        # Try to parse JSON strings
         data = result
-        if isinstance(result, str):
-            s = result.strip()
-            if s.startswith("{") or s.startswith("["):
-                try:
-                    data = json.loads(s)
-                except Exception:
-                    self.output.setPlainText(self._pretty_print(result))
-                    return
+        if isinstance(result, str) and (result.strip().startswith(("{", "["))):
+            try:
+                data = json.loads(result.strip())
+            except Exception:
+                self.output.setPlainText(self._pretty_print(result))
+                return
 
-        # Handle QR only for known QR response types
-        if isinstance(data, dict):
-            t = data.get("type")
-            msg = data.get("message", "")
+        # Handle QR response types
+        if isinstance(data, dict) and (t := data.get("type")) in {"alreadyLogged", "error", "qrCode"}:
+            qr_link = f"https://qr.green-api.com/wainstance{self._ctx.get('instance_id', '')}/{self._ctx.get('api_token', '')}"
+            if t == "alreadyLogged":
+                self.output.setPlainText(f"Instance is already authorised.\nTo get a new QR code, first run Logout.\n\nQR link:\n{qr_link}")
+            elif t == "error":
+                self.output.setPlainText(f"QR error:\n{data.get('message', '')}\n\nQR link:\n{qr_link}")
+            else:  # qrCode
+                qr.QrCodeDialog(link=qr_link, qr_base64=data.get("message", ""), parent=self).exec()
+                self.output.setPlainText(f"QR ready.\n\n{qr_link}")
+            return
 
-            if t in {"alreadyLogged", "error", "qrCode"}:
-                instance_id = self._ctx.get("instance_id", "")
-                api_token = self._ctx.get("api_token", "")
-                qr_link = f"https://qr.green-api.com/wainstance{instance_id}/{api_token}"
-
-                if t == "alreadyLogged":
-                    self.output.setPlainText(
-                        "Instance is already authorised.\n"
-                        "To get a new QR code, first run Logout.\n\n"
-                        f"QR link:\n{qr_link}"
-                    )
-                    return
-
-                if t == "error":
-                    self.output.setPlainText(f"QR error:\n{msg}\n\nQR link:\n{qr_link}")
-                    return
-
-                if t == "qrCode":
-                    dlg = qr.QrCodeDialog(link=qr_link, qr_base64=msg, parent=self)
-                    dlg.exec()
-                    self.output.setPlainText(f"QR ready.\n\n{qr_link}")
-                    return
-
-        # Fallback for everything else
         self.output.setPlainText(self._pretty_print(data))
 
     @QtCore.Slot(str)
@@ -333,17 +330,13 @@ class App(QtWidgets.QWidget):
         try:
             if isinstance(value, (dict, list)):
                 return json.dumps(value, indent=2, ensure_ascii=False)
-
             if isinstance(value, (bytes, bytearray)):
                 value = value.decode("utf-8", errors="replace")
-
             if isinstance(value, str):
-                parsed = json.loads(value)  # will throw if not JSON
-                return json.dumps(parsed, indent=2, ensure_ascii=False)
-
-            return str(value)
+                return json.dumps(json.loads(value), indent=2, ensure_ascii=False)
         except Exception:
-            return str(value)
+            pass
+        return str(value)
 
     def _get_instance_id_or_warn(self) -> str | None:
         """Get the instance ID from the input field, or show a warning if empty.
@@ -362,26 +355,149 @@ class App(QtWidgets.QWidget):
         self.output.setPlainText(msg)
 
     def _ctx_is_valid(self, instance_id: str) -> bool:
-        if not self._ctx:
+        if not self._ctx or self._ctx.get("instance_id") != instance_id:
             return False
-        if self._ctx.get("instance_id") != instance_id:
+        if time.time() - float(self._ctx.get("ts", 0)) > self._ctx_ttl_seconds:
             return False
-        age = time.time() - float(self._ctx.get("ts", 0))
-        if age > self._ctx_ttl_seconds:
-            return False
-
         tok = (self._ctx.get("api_token") or "").strip()
-        if not tok or tok == "apiToken not found" or tok.startswith("HTTP "):
-            return False
+        return bool(tok and tok != "apiToken not found" and not tok.startswith("HTTP ") and self._ctx.get("api_url"))
 
-        url = (self._ctx.get("api_url") or "").strip()
-        if not url:
-            return False
+    def _reauthenticate_kibana(self):
+        """Force re-authentication with Kibana by clearing the current session."""
+        cred_mgr = get_credential_manager()
+        cred_mgr.set_kibana_cookie(None)
+        self.output.setPlainText("Clearing current session...")
+        if not self._authenticate_kibana():
+            self.output.setPlainText("Re-authentication cancelled.")
 
+    def _authenticate_kibana(self) -> bool:
+        """
+        Authenticate with Kibana using username/password.
+        Tries environment credentials first, then prompts user with retry on failure.
+        
+        Returns:
+            True if authentication succeeded or user cancelled, False should never happen
+        """
+        cred_mgr = get_credential_manager()
+        env_username = os.getenv("KIBANA_USER")
+        env_password = os.getenv("KIBANA_PASS")
+        
+        # Try environment credentials first
+        if env_username and env_password:
+            self.output.setPlainText("⚠ Certificate configured.\n"
+                                   "Authenticating with credentials from environment...")
+            cookie = get_kibana_session_cookie_with_password(
+                env_username,
+                env_password,
+                cred_mgr.get_certificate_files()
+            )
+            if cookie:
+                cred_mgr.set_kibana_cookie(cookie)
+                self.output.setPlainText("✓ Certificate and Kibana session configured!")
+                return True
+            else:
+                self.output.setPlainText("⚠ Automatic login with environment credentials failed.\n"
+                                       "Please enter your credentials manually...")
+        
+        # Prompt for credentials with retry loop
+        prefill_username = env_username or ""
+        while True:
+            login_dialog = KibanaLoginDialog(self, prefill_username=prefill_username)
+            if login_dialog.exec() != QtWidgets.QDialog.Accepted:
+                self.output.setPlainText("⚠ Kibana authentication cancelled.\n"
+                                       "API calls may fail. You can try again later.")
+                return True  # Allow user to continue without Kibana session
+            
+            username, password = login_dialog.get_credentials()
+            prefill_username = username  # Remember username for retry
+            
+            self.output.setPlainText(f"Authenticating as {username}...")
+            cookie = get_kibana_session_cookie_with_password(
+                username,
+                password,
+                cred_mgr.get_certificate_files()
+            )
+            
+            if cookie:
+                cred_mgr.set_kibana_cookie(cookie)
+                self.output.setPlainText("✓ Certificate and Kibana session configured!")
+                return True
+            else:
+                # Authentication failed - ask if user wants to retry
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Authentication Failed",
+                    "Kibana authentication failed. This could be due to:\n"
+                    "• Incorrect username or password\n"
+                    "• Network issues\n"
+                    "• Certificate problems\n\n"
+                    "Would you like to try again?",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+                )
+                
+                if reply != QtWidgets.QMessageBox.Yes:
+                    self.output.setPlainText("⚠ Kibana authentication skipped.\n"
+                                           "API calls may fail. You can try again later.")
+                    return True  # Allow user to continue without Kibana session
+                # Loop continues to retry
+
+    def _ensure_authentication(self) -> bool:
+        """
+        Ensure the user is authenticated with certificate.
+        Certificate selection automatically triggers Kibana session establishment.
+        Falls back to manual Kibana cookie entry if automatic authentication fails.
+        
+        Returns:
+            True if authentication is successful (or user chooses to continue), False if user cancelled
+        """
+        cred_mgr = get_credential_manager()
+        
+        # Check if certificate is configured
+        if not cred_mgr.has_certificate():
+            cert_dialog = CertificateSelectorDialog(self)
+            if cert_dialog.exec() != QtWidgets.QDialog.Accepted:
+                self.output.setPlainText("Certificate selection cancelled.")
+                return False
+            
+            cert_result = cert_dialog.get_selected_certificate()
+            if not cert_result:
+                self.output.setPlainText("Failed to export certificate.")
+                return False
+            
+            cert_pem, cert_context = cert_result
+            if not cred_mgr.set_certificate(cert_pem, cert_context):
+                self.output.setPlainText("Failed to configure certificate.")
+                return False
+            
+            # Give feedback about Kibana session status
+            if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
+                return False
+            if cred_mgr.has_kibana_cookie():
+                self.output.setPlainText("✓ Certificate and Kibana session configured successfully!")
+        
+        # Update client.py to use the configured certificates
+        if cert_files := cred_mgr.get_certificate_files():
+            ga.set_certificate_files(cert_files[0], cert_files[1])
         return True
 
     def _fetch_ctx(self, instance_id: str) -> dict:
-        token = get_api_token(instance_id)
+        """Fetch context (API token and URL) for the given instance."""
+        # Authentication should already be done on main thread before this is called
+        cred_mgr = get_credential_manager()
+        cert_files = cred_mgr.get_certificate_files()
+        kibana_cookie = cred_mgr.get_kibana_cookie()
+        
+        if not cert_files:
+            return {
+                "instance_id": instance_id,
+                "api_url": "",
+                "api_token": "Certificate authentication not configured",
+                "ts": time.time(),
+            }
+        
+        # Note: kibana_cookie may be None if user skipped manual auth and automatic failed
+        # Try to get token anyway - it may still work depending on server configuration
+        token = get_api_token(instance_id, kibana_cookie=kibana_cookie, cert_files=cert_files)
         url = resolve_api_url(instance_id)
         return {
             "instance_id": instance_id,
@@ -391,31 +507,24 @@ class App(QtWidgets.QWidget):
         }
 
     def _with_ctx(self, instance_id: str, call_fn):
-        """
-        Runs call_fn(api_url, api_token) with cached context if fresh,
-        otherwise refreshes token/url first. Returns dict payload.
-        """
-        if self._ctx_is_valid(instance_id):
-            ctx = self._ctx
-        else:
-            ctx = self._fetch_ctx(instance_id)
-
+        """Runs call_fn(api_url, api_token) with cached context if fresh."""
+        ctx = self._ctx if self._ctx_is_valid(instance_id) else self._fetch_ctx(instance_id)
         token = ctx.get("api_token", "")
-        if not token or token == "apiToken not found" or str(token).startswith("HTTP "):
+        if not token or token == "apiToken not found" or token.startswith("HTTP "):
             return {"ctx": ctx, "error": f"Failed to get apiToken: {token}"}
-
-        api_url = ctx.get("api_url", "")
-        if not api_url:
+        if not ctx.get("api_url"):
             return {"ctx": ctx, "error": "Failed to resolve apiUrl"}
-
-        result = call_fn(api_url, token)
-        return {"ctx": ctx, "result": result}
+        return {"ctx": ctx, "result": call_fn(ctx["api_url"], token)}
 
     # API Methods
 
     def run_get_api_token(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
+            return
+        
+        # Ensure authentication in main thread before async work
+        if not self._ensure_authentication():
             return
 
         def work():
@@ -441,6 +550,10 @@ class App(QtWidgets.QWidget):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
+        
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
 
         # Fetch current settings first (async)
         def work_fetch():
@@ -459,48 +572,32 @@ class App(QtWidgets.QWidget):
 
     def run_logout_instance(self):
         instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
+        if not instance_id or not self._ensure_authentication():
             return
-
-        if not self._confirm_action(
-            "Confirm Logout",
-            f"Are you sure you want to logout instance {instance_id}?\n\nThis will disconnect the WhatsApp session.",
-            "Logout cancelled."
-        ):
+        if not self._confirm_action("Confirm Logout", f"Are you sure you want to logout instance {instance_id}?\n\nThis will disconnect the WhatsApp session.", "Logout cancelled."):
             return
-
+        
         def work():
-            payload = self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.logout_instance(api_url, instance_id, api_token),
-            )
-            if isinstance(payload, dict) and payload.get("result") == '{"isLogout":true}':
+            payload = self._with_ctx(instance_id, lambda u, t: ga.logout_instance(u, instance_id, t))
+            if payload.get("result") == '{"isLogout":true}':
                 payload["result"] = "Logout successful."
             return payload
-
+        
         self._run_async("Logging out instance...", work)
 
     def run_reboot_instance(self):
         instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
+        if not instance_id or not self._ensure_authentication():
             return
-
-        if not self._confirm_action(
-            "Confirm Reboot",
-            f"Are you sure you want to reboot instance {instance_id}?\n\nThis may interrupt message processing.",
-            "Reboot cancelled."
-        ):
+        if not self._confirm_action("Confirm Reboot", f"Are you sure you want to reboot instance {instance_id}?\n\nThis may interrupt message processing.", "Reboot cancelled."):
             return
-
+        
         def work():
-            payload = self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.reboot_instance(api_url, instance_id, api_token),
-            )
-            if isinstance(payload, dict) and payload.get("result") == '{"isReboot":true}':
+            payload = self._with_ctx(instance_id, lambda u, t: ga.reboot_instance(u, instance_id, t))
+            if payload.get("result") == '{"isReboot":true}':
                 payload["result"] = "Reboot successful."
             return payload
-
+        
         self._run_async("Rebooting instance...", work)
 
     def run_get_qr_code(self):
@@ -508,18 +605,15 @@ class App(QtWidgets.QWidget):
 
     def run_get_wa_settings(self):
         instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
+        if not instance_id or not self._ensure_authentication():
             return
         
         def work():
-            output = self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_wa_settings(api_url, instance_id, api_token),
-            )
+            output = self._with_ctx(instance_id, lambda u, t: ga.get_wa_settings(u, instance_id, t))
             if not isinstance(output, dict):
                 output = "WhatsApp account not found. This instance may be for another service. You can check the typeInstance with the Get Instance Settings button." 
             return output
-
+        
         self._run_async("Fetching WhatsApp settings...", work)
 
     # Journal API methods
@@ -528,33 +622,27 @@ class App(QtWidgets.QWidget):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_incoming_msgs_journal(api_url, instance_id, api_token, minutes=1440),
-            )
-
-        self._run_async("Fetching Incoming Messages Journal...", work)
+        if not self._ensure_authentication():
+            return
+        self._run_async("Fetching Incoming Messages Journal...", 
+                       lambda: self._with_ctx(instance_id, lambda u, t: ga.get_incoming_msgs_journal(u, instance_id, t, minutes=1440)))
 
     def run_get_outgoing_msgs_journal(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_outgoing_msgs_journal(api_url, instance_id, api_token, minutes=1440),
-            )
-
-        self._run_async("Fetching Outgoing Messages Journal...", work)
+        if not self._ensure_authentication():
+            return
+        self._run_async("Fetching Outgoing Messages Journal...",
+                       lambda: self._with_ctx(instance_id, lambda u, t: ga.get_outgoing_msgs_journal(u, instance_id, t, minutes=1440)))
 
     def run_get_chat_history(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
+            return        
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
             return
-
         params = forms.ask_chat_history(
             self,
             chat_id_default=(self._last_chat_id or ""),
@@ -580,8 +668,10 @@ class App(QtWidgets.QWidget):
     def run_get_message(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
+            return        
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
             return
-
         params = forms.ask_get_message(
             self,
             chat_id_default=(self._last_chat_id or ""),
@@ -615,6 +705,10 @@ class App(QtWidgets.QWidget):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
+        
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
 
         reply = QtWidgets.QMessageBox.question(
             self,
@@ -645,6 +739,10 @@ class App(QtWidgets.QWidget):
         if not instance_id:
             return
         
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
         if not self._confirm_action(
             "Confirm Clear Webhooks Queue",
             f"Are you sure you want to clear the incoming webhooks queue for instance {instance_id}?\n\nThis will delete ALL queued incoming webhooks.",
@@ -653,31 +751,19 @@ class App(QtWidgets.QWidget):
             return
         
         def work():
-            payload = self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.clear_webhooks_queue(api_url, instance_id, api_token),
-            )
-
+            payload = self._with_ctx(instance_id, lambda u, t: ga.clear_webhooks_queue(u, instance_id, t))
             if not isinstance(payload, dict) or "result" not in payload:
                 return payload
-
+            
             raw = payload["result"]
-
             if isinstance(raw, str):
                 try:
                     raw = json.loads(raw)
                 except Exception:
-                    payload["result"] = f"Unexpected response:\n{raw}"
-                    return payload
-
-            if isinstance(raw, dict) and raw.get("isCleared") is True:
-                payload["result"] = "Webhook queue cleared successfully."
-            else:
-                reason = ""
-                if isinstance(raw, dict):
-                    reason = raw.get("reason", "")
-                payload["result"] = f"Webhook queue could not be cleared.\n\n{reason}"
-
+                    pass
+            
+            if isinstance(raw, dict):
+                payload["result"] = "Webhook queue cleared successfully." if raw.get("isCleared") else f"Webhook queue could not be cleared.\n\n{raw.get('reason', '')}"
             return payload
 
         self._run_async("Clearing Incoming Webhook Queue...", work)
@@ -686,33 +772,25 @@ class App(QtWidgets.QWidget):
 
     def run_get_incoming_statuses(self):
         instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
+        if not instance_id or not self._ensure_authentication():
             return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_incoming_statuses(api_url, instance_id, api_token, minutes=1440),
-            )
-
-        self._run_async("Fetching Incoming Statuses...", work)
+        self._run_async("Fetching Incoming Statuses...",
+                       lambda: self._with_ctx(instance_id, lambda u, t: ga.get_incoming_statuses(u, instance_id, t, minutes=1440)))
 
     def run_get_outgoing_statuses(self):
         instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
+        if not instance_id or not self._ensure_authentication():
             return
-
-        def work():
-            return self._with_ctx(
-                instance_id,
-                lambda api_url, api_token: ga.get_outgoing_statuses(api_url, instance_id, api_token, minutes=1440),
-            )
-
-        self._run_async("Fetching Outgoing Statuses...", work)
+        self._run_async("Fetching Outgoing Statuses...",
+                       lambda: self._with_ctx(instance_id, lambda u, t: ga.get_outgoing_statuses(u, instance_id, t, minutes=1440)))
 
     def run_get_status_statistic(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
+            return
+        
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
             return
 
         id_message = forms.ask_status_statistic(self)

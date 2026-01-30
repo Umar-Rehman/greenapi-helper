@@ -1,36 +1,100 @@
 import requests
-from pathlib import Path
+from typing import Optional, Tuple
 
 # Configuration
 
-CLIENT_CERT = Path("client.crt")
-CLIENT_KEY = Path("client.key")
-
 VERIFY_TLS = True
 TIMEOUT_SECONDS = 60
+
+# Certificate files for fallback (if not using credential manager)
+_fallback_cert_files: Optional[Tuple[str, str]] = None
+
+
+def set_certificate_files(cert_path: str, key_path: str):
+    """Set certificate files to use for API calls."""
+    global _fallback_cert_files
+    _fallback_cert_files = (cert_path, key_path)
+
+
+def get_certificate_files() -> Tuple[str, str]:
+    """Get certificate files, using fallback if credential manager not set."""
+    if _fallback_cert_files:
+        return _fallback_cert_files
+    
+    # Fallback to default files if they exist
+    return ("client.crt", "client.key")
+
 
 # Helper Functions
 
 def _build_url(api_url: str, instance_id: str, path: str) -> str:
     return f"{api_url}/waInstance{instance_id}/{path}"
 
-def send_request(method: str, url: str, *, json_body: dict | None = None) -> str:
-    resp = requests.request(
-        method=method.upper(),
-        url=url,
-        headers={"accept": "application/json"},
-        json=json_body,
-        cert=(str(CLIENT_CERT), str(CLIENT_KEY)),
-        verify=VERIFY_TLS,
-        timeout=TIMEOUT_SECONDS,
-    )
 
-    if resp.status_code != 200:
-        return f"HTTP {resp.status_code}: {resp.text}"
+def send_request(
+    method: str,
+    url: str,
+    *,
+    json_body: dict | None = None,
+    cert_files: Optional[Tuple[str, str]] = None,
+    use_cert: bool = False
+) -> str:
+    """Send an HTTP request with optional client certificate authentication.
+    
+    Args:
+        method: HTTP method
+        url: Request URL
+        json_body: Optional JSON payload
+        cert_files: Optional tuple of (cert_path, key_path). If None, uses configured certificates.
+                   key_path can be None if only certificate is available.
+        use_cert: Whether to use client certificate. Green API calls don't need certs (token auth only).
+    
+    Returns:
+        Response text or error message
+    """
+    cert = None
+    if use_cert:
+        cert = cert_files or get_certificate_files()
+        
+        # Handle case where key_path might be None
+        if cert and len(cert) == 2 and cert[1] is None:
+            # If no key path, just use the cert path - requests will handle it
+            cert = cert[0]
+    
+    try:
+        resp = requests.request(
+            method=method.upper(),
+            url=url,
+            headers={"accept": "application/json"},
+            json=json_body,
+            cert=cert,
+            verify=VERIFY_TLS,
+            timeout=TIMEOUT_SECONDS,
+        )
 
-    return resp.text
+        if resp.status_code != 200:
+            return f"HTTP {resp.status_code}: {resp.text}"
 
-def make_api_call(api_url: str, instance_id: str, api_token: str, path: str, method: str, json_body=None, query_params=None) -> str:
+        return resp.text
+    
+    except requests.exceptions.SSLError as e:
+        return f"SSL Certificate Error: {str(e)}\nPlease check your client certificate."
+    except requests.exceptions.RequestException as e:
+        return f"Request Error: {str(e)}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+def make_api_call(
+    api_url: str,
+    instance_id: str,
+    api_token: str,
+    path: str,
+    method: str,
+    json_body=None,
+    query_params=None,
+    cert_files: Optional[Tuple[str, str]] = None
+) -> str:
     """Make a generic API call to the Green API.
 
     Args:
@@ -41,6 +105,7 @@ def make_api_call(api_url: str, instance_id: str, api_token: str, path: str, met
         method: HTTP method (GET, POST, etc.).
         json_body: Optional JSON payload for POST requests.
         query_params: Optional dict of query parameters.
+        cert_files: Optional tuple of (cert_path, key_path) for client certificates.
 
     Returns:
         API response as string.
@@ -49,7 +114,8 @@ def make_api_call(api_url: str, instance_id: str, api_token: str, path: str, met
     if query_params:
         from urllib.parse import urlencode
         url += "?" + urlencode(query_params)
-    return send_request(method, url, json_body=json_body)
+    # Green API uses token authentication, not client certificates
+    return send_request(method, url, json_body=json_body, cert_files=cert_files, use_cert=False)
 
 # Account API functions
 

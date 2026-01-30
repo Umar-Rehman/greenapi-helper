@@ -1,7 +1,17 @@
 # The Helper – Green API Tool
 
 This is a small desktop tool to quickly call Green API endpoints using an **Instance ID**.
-Each button runs **one API request**, similar to Postman, but faster for daily support tasks without the ned for context switching and extra parameter gathering.
+Each button runs **one API request**, similar to Postman, but faster for daily support tasks without the need for context switching and extra parameter gathering.
+
+---
+
+## New: Windows Certificate Store Integration
+
+**No more certificate files needed!** The application now supports:
+- Direct certificate selection from Windows Certificate Store
+- Seamless Kibana authentication on first use
+- Secure credential management in memory
+- Automatic cleanup on exit
 
 ---
 
@@ -10,7 +20,6 @@ Each button runs **one API request**, similar to Postman, but faster for daily s
 * You enter an **Instance ID**
 * Click a button (Get State, Settings, Journals, Reboot, etc.)
 * The tool:
-
   * automatically finds the API URL
   * automatically finds the API token from logs
   * sends the API request
@@ -20,34 +29,39 @@ You **do not** need to enter API tokens or URLs manually.
 
 ---
 
-## First-time setup (required)
+## Quick Start
 
-### 1. Prepare the config file
+### 1. Install dependencies
 
-1. In this folder, copy:
+```bash
+pip install -r requirements.txt
+```
 
-   ```
-   .env.local.example
-   ```
+### 2. Run the application
 
-   to:
+```bash
+python -m app.main
+```
 
-   ```
-   .env.local
-   ```
+### 3. On first use
 
-2. Open `.env.local` and set:
+When you click any button for the first time:
 
-   ```
-   KIBANA_COOKIE=your_kibana_cookie_here
-   ```
+1. **Certificate Selection Dialog** will appear:
+   - Select your client certificate from Windows Certificate Store
+   - Only certificates with private keys are shown
 
-> This cookie is your own login session.
-> Do NOT share it with others.
+2. **Kibana Authentication Dialog** will appear:
+   - Enter your Kibana session cookie
+   - Get it from browser: F12 → Application → Cookies
+
+3. **Done!** Credentials are remembered for the session
 
 ---
 
-### 2. Add your certificate files
+## Legacy Setup (Optional)
+
+### If you prefer using certificate files:
 
 Place your **client certificate files** in the same folder as `TheHelper.exe`:
 
