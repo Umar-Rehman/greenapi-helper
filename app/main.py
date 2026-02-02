@@ -561,11 +561,12 @@ class App(QtWidgets.QWidget):
         # Try environment credentials first
         if env_username and env_password:
             # Show progress dialog for authentication
-            progress = QtWidgets.QProgressDialog("Authenticating with Kibana...", None, 0, 0, self)
+            progress = QtWidgets.QProgressDialog("Authenticating with Kibana...", "Please wait...", 0, 0, self)
             progress.setWindowModality(QtCore.Qt.WindowModal)
-            progress.setWindowTitle("Authenticating...")
+            progress.setWindowTitle("Kibana Authentication")
             progress.setCancelButton(None)  # No cancel button
             progress.setMinimumDuration(0)  # Show immediately
+            progress.setLabelText("Authenticating with Kibana using certificate...")
             progress.show()
 
             try:
@@ -587,10 +588,6 @@ class App(QtWidgets.QWidget):
         # Prompt for credentials with retry loop
         prefill_username = env_username or ""
         while True:
-            # Show status before login dialog appears
-            self.output.setPlainText("Opening login dialog...")
-            QtWidgets.QApplication.processEvents()  # Allow UI to update
-
             login_dialog = KibanaLoginDialog(self, prefill_username=prefill_username)
             if login_dialog.exec() != QtWidgets.QDialog.Accepted:
                 self.output.setPlainText("Kibana authentication cancelled.")
@@ -657,14 +654,22 @@ class App(QtWidgets.QWidget):
             cert_result = cert_dialog.get_selected_certificate()
             if not cert_result:
                 self.output.setPlainText("Failed to export certificate.")
+                cert_dialog.close()
                 return False
 
             cert_pem, cert_context = cert_result
             if not cred_mgr.set_certificate(cert_pem, cert_context):
                 self.output.setPlainText("Failed to configure certificate.")
+                cert_dialog.close()
                 return False
 
+            # Explicitly close the certificate dialog
+            cert_dialog.close()
+
             # Give feedback about Kibana session status
+            self.output.setPlainText("Authenticating with Kibana...")
+            QtWidgets.QApplication.processEvents()  # Allow UI to update
+            
             if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
                 return False
             if cred_mgr.has_kibana_cookie():

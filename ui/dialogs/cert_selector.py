@@ -43,9 +43,15 @@ class CertificateSelectorDialog(QDialog):
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
-        # Certificate list
+        # Loading indicator
+        self.loading_label = QLabel("Loading certificates...")
+        self.loading_label.setStyleSheet("font-style: italic; color: #666;")
+        layout.addWidget(self.loading_label)
+
+        # Certificate list (initially hidden)
         self.cert_list = QListWidget()
         self.cert_list.itemDoubleClicked.connect(self.accept)
+        self.cert_list.setVisible(False)
         layout.addWidget(self.cert_list)
 
         # Details label
@@ -147,6 +153,10 @@ class CertificateSelectorDialog(QDialog):
                     item.setData(Qt.UserRole, len(self._certificates) - 1)
                     self.cert_list.addItem(item)
 
+            # Hide loading indicator and show certificate list
+            self.loading_label.setVisible(False)
+            self.cert_list.setVisible(True)
+
             if self.cert_list.count() == 0:
                 QMessageBox.warning(
                     self,
@@ -160,6 +170,10 @@ class CertificateSelectorDialog(QDialog):
                     "you may need to import it with the 'Mark this key as exportable' option.\n\n"
                     "Check the console output for debug information.",
                 )
+
+            # Hide loading indicator and show certificate list
+            self.loading_label.setVisible(False)
+            self.cert_list.setVisible(True)
 
         except Exception as e:
             QMessageBox.critical(
