@@ -19,7 +19,7 @@ def get_current_version() -> str:
         with open(version_file, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("version", "0.0.0")
-    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+    except FileNotFoundError, json.JSONDecodeError, KeyError:
         return "0.0.0"
 
 
@@ -166,7 +166,7 @@ del "%~f0"
                 "Update Started",
                 "Update downloaded successfully!\n\n"
                 "The new version is starting now.\n"
-                "Please close this window when the new version appears."
+                "Please close this window when the new version appears.",
             )
 
             QtWidgets.QApplication.quit()
@@ -177,7 +177,7 @@ del "%~f0"
                 "Update Failed",
                 f"Update downloaded but installation failed: {str(e)}\n\n"
                 f"New executable is at: {new_exe_path}\n\n"
-                "Please manually replace the executable and restart the application."
+                "Please manually replace the executable and restart the application.",
             )
 
 
