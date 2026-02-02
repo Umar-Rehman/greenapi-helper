@@ -3,8 +3,8 @@ import json
 import traceback
 import os
 from PySide6 import QtGui, QtCore, QtWidgets
-from app.version import __version__
 from app.resources import resource_path
+from app.update import get_update_manager, get_current_version
 from ui.dialogs import forms, instance_settings, qr
 from ui.dialogs.cert_selector import CertificateSelectorDialog
 from ui.dialogs.kibana_login import KibanaLoginDialog
@@ -43,12 +43,28 @@ class App(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"The Helper ({__version__})")
+        self.setWindowTitle(f"The Helper ({get_current_version()})")
         self._ctx = None  # {"instance_id": str, "api_url": str, "api_token": str, "ts": float}
         self._ctx_ttl_seconds = 10 * 60
         self._last_chat_id = None
 
+        # Thread pool for async operations (optimization)
+        self._thread_pool = QtCore.QThreadPool.globalInstance()
+        self._thread_pool.setMaxThreadCount(4)  # Limit concurrent operations
+
+        # JSON parsing cache (optimization)
+        self._json_cache = {}
+        self._json_cache_max_size = 10
+
+        # Initialize update manager
+        self.update_manager = get_update_manager()
+        self.update_manager.update_available.connect(self._on_update_available)
+        self.update_manager.update_error.connect(self._on_update_error)
+
         self._setup_ui()
+
+        # Check for updates after UI is set up
+        QtCore.QTimer.singleShot(1000, self.update_manager.check_for_updates)  # Check after 1 second
 
     def _add_button(self, layout, text, handler, action_type=None):
         """Add a QPushButton to the given layout with specified text and handler.
@@ -85,7 +101,10 @@ class App(QtWidgets.QWidget):
             return
 
         def work():
-            return self._with_ctx(instance_id, lambda api_url, api_token: api_func(api_url, instance_id, api_token))
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: api_func(api_url, instance_id, api_token),
+            )
 
         self._run_async(status_text, work)
 
@@ -110,6 +129,37 @@ class App(QtWidgets.QWidget):
         return True
 
     def _setup_ui(self):
+        # API method mappings for automatic method generation
+        # Format: (status_text, api_func, needs_auth)
+        self._api_method_mappings = {
+            "run_get_instance_state": ("Fetching Instance State...", ga.get_instance_state, False),
+            "run_get_instance_settings": ("Fetching Instance Settings...", ga.get_instance_settings, False),
+            "run_get_qr_code": ("Fetching QR code...", ga.get_qr_code, False),
+            "run_get_msg_queue_count": ("Fetching Message Queue Count...", ga.get_msg_queue_count, False),
+            "run_get_msg_queue": ("Fetching Messages Queue...", ga.get_msg_queue, False),
+            "run_get_webhook_count": ("Fetching Webhook Queue Count...", ga.get_webhook_count, False),
+            "run_get_incoming_statuses": (
+                "Fetching Incoming Statuses...",
+                lambda u, i, t: ga.get_incoming_statuses(u, i, t, minutes=1440),
+                True,
+            ),
+            "run_get_outgoing_statuses": (
+                "Fetching Outgoing Statuses...",
+                lambda u, i, t: ga.get_outgoing_statuses(u, i, t, minutes=1440),
+                True,
+            ),
+            "run_get_incoming_msgs_journal": (
+                "Fetching Incoming Messages Journal...",
+                lambda u, i, t: ga.get_incoming_msgs_journal(u, i, t, minutes=1440),
+                True,
+            ),
+            "run_get_outgoing_msgs_journal": (
+                "Fetching Outgoing Messages Journal...",
+                lambda u, i, t: ga.get_outgoing_msgs_journal(u, i, t, minutes=1440),
+                True,
+            ),
+        }
+
         root = QtWidgets.QVBoxLayout()
         self._create_instance_input(root)
         self._create_reauthenticate_button(root)
@@ -117,6 +167,21 @@ class App(QtWidgets.QWidget):
         self._create_progress_area(root)
         self._create_output_area(root)
         self.setLayout(root)
+
+    def _run_mapped_api_call(self, method_name: str):
+        """Generic handler for simple API calls using the mapping."""
+        if method_name not in self._api_method_mappings:
+            raise ValueError(f"Unknown API method: {method_name}")
+
+        status_text, api_func, needs_auth = self._api_method_mappings[method_name]
+
+        if needs_auth:
+            # Methods that need authentication
+            instance_id = self._get_instance_id_or_warn()
+            if not instance_id or not self._ensure_authentication():
+                return
+
+        self._run_simple_api_call(status_text, api_func)
 
     def _create_instance_input(self, root):
         root.addWidget(QtWidgets.QLabel("Instance ID:"))
@@ -141,12 +206,17 @@ class App(QtWidgets.QWidget):
         account_tab = QtWidgets.QWidget()
         account_layout = QtWidgets.QVBoxLayout(account_tab)
         self.button = self._add_button(
-            account_layout, "Get Instance Information (API Token / URL)", self.run_get_api_token
+            account_layout,
+            "Get Instance Information (API Token / URL)",
+            self.run_get_api_token,
         )
         self.state_button = self._add_button(account_layout, "Get Instance State", self.run_get_instance_state)
         self.settings_button = self._add_button(account_layout, "Get Instance Settings", self.run_get_instance_settings)
         self.set_settings_button = self._add_button(
-            account_layout, "Set Instance Settings", self.run_set_instance_settings, "post"
+            account_layout,
+            "Set Instance Settings",
+            self.run_set_instance_settings,
+            "post",
         )
         self.get_wa_settings_button = self._add_button(
             account_layout, "Get WhatsApp Settings", self.run_get_wa_settings
@@ -161,10 +231,14 @@ class App(QtWidgets.QWidget):
         journals_tab = QtWidgets.QWidget()
         journals_layout = QtWidgets.QVBoxLayout(journals_tab)
         self.journal_button = self._add_button(
-            journals_layout, "Get Incoming Messages Journal", self.run_get_incoming_msgs_journal
+            journals_layout,
+            "Get Incoming Messages Journal",
+            self.run_get_incoming_msgs_journal,
         )
         self.outgoing_journal_button = self._add_button(
-            journals_layout, "Get Outgoing Messages Journal", self.run_get_outgoing_msgs_journal
+            journals_layout,
+            "Get Outgoing Messages Journal",
+            self.run_get_outgoing_msgs_journal,
         )
         self.chat_history_button = self._add_button(
             journals_layout, "Get Chat History", self.run_get_chat_history, "post"
@@ -179,7 +253,10 @@ class App(QtWidgets.QWidget):
         self.msg_count_button = self._add_button(queue_layout, "Get Message Queue Count", self.run_get_msg_queue_count)
         self.msg_queue_button = self._add_button(queue_layout, "Get Messages Queued to Send", self.run_get_msg_queue)
         self.clear_queue_button = self._add_button(
-            queue_layout, "Clear Message Queue to Send", self.run_clear_msg_queue, "post"
+            queue_layout,
+            "Clear Message Queue to Send",
+            self.run_clear_msg_queue,
+            "post",
         )
         self.webhook_count_button = self._add_button(queue_layout, "Get Webhook Count", self.run_get_webhook_count)
         self.webhook_delete_button = self._add_button(
@@ -234,7 +311,7 @@ class App(QtWidgets.QWidget):
     # Worker handlers
 
     @QtCore.Slot(object)
-    def _on_worker_result(self, payload):
+    def _on_worker_result(self, payload, worker=None, button=None):
         # Update status to show success
         self.status_label.setText("✅ Operation completed")
         self.status_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
@@ -259,7 +336,7 @@ class App(QtWidgets.QWidget):
             # Parse the settings JSON (API often returns a JSON string)
             raw = payload.get("result", {})
             try:
-                settings_dict = json.loads(raw) if isinstance(raw, str) else raw
+                settings_dict = self._parse_json_cached(raw) if isinstance(raw, str) else raw
             except Exception:
                 settings_dict = {}
 
@@ -296,7 +373,7 @@ class App(QtWidgets.QWidget):
                 result = payload.get("result")
 
                 try:
-                    data = json.loads(result) if isinstance(result, str) else result
+                    data = self._parse_json_cached(result) if isinstance(result, str) else result
                 except Exception:
                     data = None
 
@@ -312,13 +389,17 @@ class App(QtWidgets.QWidget):
         data = result
         if isinstance(result, str) and (result.strip().startswith(("{", "["))):
             try:
-                data = json.loads(result.strip())
+                data = self._parse_json_cached(result.strip())
             except Exception:
                 self.output.setPlainText(self._pretty_print(result))
                 return
 
         # Handle QR response types
-        if isinstance(data, dict) and (t := data.get("type")) in {"alreadyLogged", "error", "qrCode"}:
+        if isinstance(data, dict) and (t := data.get("type")) in {
+            "alreadyLogged",
+            "error",
+            "qrCode",
+        }:
             instance_id = self._ctx.get("instance_id", "")
             api_token = self._ctx.get("api_token", "")
             qr_link = f"https://qr.green-api.com/wainstance{instance_id}/{api_token}"
@@ -410,7 +491,7 @@ class App(QtWidgets.QWidget):
         return f"An error occurred. Please try again.\n\nDetails: {error[:200]}..."
 
     @QtCore.Slot(str)
-    def _on_worker_error(self, err: str):
+    def _on_worker_error(self, err: str, worker=None, button=None):
         """Handle errors from background worker threads."""
         # Update status to show error
         self.status_label.setText("❌ Operation failed")
@@ -422,19 +503,50 @@ class App(QtWidgets.QWidget):
         user_friendly_error = self._handle_api_error(err)
         self.output.setPlainText(user_friendly_error)
 
+    @QtCore.Slot()
+    def _on_worker_finished(self, worker, button=None):
+        """Handle worker completion and cleanup."""
+        # Re-enable button
+        if button is not None:
+            button.setEnabled(True)
+
+        # Remove from workers list
+        if hasattr(self, "_workers") and worker in self._workers:
+            self._workers.remove(worker)
+
+        # Decrement active operations count
+        if hasattr(self, "_active_operations"):
+            self._active_operations -= 1
+
+        # Hide progress when no active operations
+        if self._active_operations <= 0:
+            self._hide_progress()
+
+    def _parse_json_cached(self, json_str: str):
+        """Parse JSON with caching to avoid repeated parsing of same data."""
+        if json_str in self._json_cache:
+            return self._json_cache[json_str]
+
+        try:
+            parsed = json.loads(json_str)
+            # Cache the result (LRU-style, keep only recent items)
+            if len(self._json_cache) >= self._json_cache_max_size:
+                # Remove oldest item (simple FIFO)
+                oldest_key = next(iter(self._json_cache))
+                del self._json_cache[oldest_key]
+            self._json_cache[json_str] = parsed
+            return parsed
+        except json.JSONDecodeError:
+            return json_str  # Return as-is if not valid JSON
+
     def _run_async(self, status_text: str, fn):
+        """Run function asynchronously using thread pool (optimized)."""
         self._set_status(status_text)
         self._show_progress(status_text)
 
-        if not hasattr(self, "_jobs"):
-            self._jobs = []
-
-        thread = QtCore.QThread(self)
-        worker = Worker(fn)
-        worker.moveToThread(thread)
-
-        job = {"thread": thread, "worker": worker}
-        self._jobs.append(job)
+        if not hasattr(self, "_active_operations"):
+            self._active_operations = 0
+        self._active_operations += 1
 
         # Disable the clicked button (only if this call was triggered by a QPushButton)
         sender = self.sender()
@@ -442,35 +554,30 @@ class App(QtWidgets.QWidget):
         if btn is not None:
             btn.setEnabled(False)
 
-        # Signal connections
-        worker.result.connect(self._on_worker_result, QtCore.Qt.QueuedConnection)
-        worker.error.connect(self._on_worker_error, QtCore.Qt.QueuedConnection)
+        # Create worker and run in thread pool
+        worker = Worker(fn)
 
-        # stop thread loop after worker finishes
-        worker.finished.connect(thread.quit, QtCore.Qt.QueuedConnection)
+        def on_result(result):
+            self._on_worker_result(result, worker, btn)
 
-        def cleanup():
-            # re-enable button
-            if btn is not None:
-                btn.setEnabled(True)
+        def on_error(error):
+            self._on_worker_error(error, worker, btn)
 
-            # remove job and delete objects
-            try:
-                self._jobs.remove(job)
-            except ValueError:
-                pass
-            worker.deleteLater()
-            thread.deleteLater()
+        def on_finished():
+            self._on_worker_finished(worker, btn)
 
-            # Hide progress when all jobs are done
-            if not hasattr(self, "_jobs") or len(self._jobs) == 0:
-                self._hide_progress()
+        worker.result.connect(on_result, QtCore.Qt.QueuedConnection)
+        worker.error.connect(on_error, QtCore.Qt.QueuedConnection)
+        worker.finished.connect(on_finished, QtCore.Qt.QueuedConnection)
 
-        # cleanup only when thread is fully stopped
-        thread.finished.connect(cleanup, QtCore.Qt.QueuedConnection)
+        # Store reference to prevent garbage collection
+        worker._btn = btn
+        if not hasattr(self, "_workers"):
+            self._workers = []
+        self._workers.append(worker)
 
-        thread.started.connect(worker.run)
-        thread.start()
+        # Start in thread pool instead of creating new thread
+        self._thread_pool.start(QtCore.QRunnable.create(worker.run))
 
     # Helpers
 
@@ -519,6 +626,13 @@ class App(QtWidgets.QWidget):
         self.status_label.setText("Ready")
         self.status_label.setStyleSheet("font-weight: bold; color: #666;")
         self.progress_bar.setVisible(False)
+
+    def _ctx_is_valid_for_instance(self, ctx: dict, instance_id: str) -> bool:
+        """Check if cached context is valid for the given instance."""
+        if not ctx or ctx.get("instance_id") != instance_id:
+            return False
+        tok = (ctx.get("api_token") or "").strip()
+        return bool(tok and tok != "apiToken not found" and not tok.startswith("HTTP ") and ctx.get("api_url"))
 
     def _reset_status_label(self):
         """Reset status label to ready state if no operations are active."""
@@ -596,16 +710,12 @@ class App(QtWidgets.QWidget):
             username, password = login_dialog.get_credentials()
             prefill_username = username  # Remember username for retry
 
-            # Show progress dialog for manual authentication
-            progress = QtWidgets.QMessageBox(self)
-            progress.setWindowTitle("Authentication")
-            progress.setText(
-                f"Authenticating as {username} with Kibana...\n\n"
+            # Show authentication message in output area
+            self.output.setPlainText(
+                f"🔐 Authenticating as {username} with Kibana...\n\n"
                 "Please wait while we establish a secure connection using your certificate."
             )
-            progress.setStandardButtons(QtWidgets.QMessageBox.NoButton)  # No buttons
-            progress.setWindowModality(QtCore.Qt.WindowModal)
-            progress.show()
+            QtWidgets.QApplication.processEvents()  # Allow UI to update
 
             try:
                 cookie = get_kibana_session_cookie_with_password(username, password, cred_mgr.get_certificate_files())
@@ -615,26 +725,24 @@ class App(QtWidgets.QWidget):
                     self.output.setPlainText("Certificate and Kibana session configured!")
                     return True
                 else:
-                    # Authentication failed - ask if user wants to retry
-                    reply = QtWidgets.QMessageBox.question(
-                        self,
-                        "Authentication Failed",
-                        "Kibana authentication failed. This could be due to:\n"
+                    # Authentication failed - show message and allow retry
+                    self.output.setPlainText(
+                        "❌ Kibana authentication failed. This could be due to:\n"
                         "• Incorrect username or password\n"
                         "• Network issues\n"
                         "• Certificate problems\n\n"
-                        "Would you like to try again?",
-                        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                        "You can try again by entering different credentials, or cancel to skip Kibana authentication."
                     )
-
-                    if reply != QtWidgets.QMessageBox.Yes:
-                        self.output.setPlainText(
-                            "⚠ Kibana authentication skipped.\n" "API calls may fail. You can try again later."
-                        )
-                        return True  # Allow user to continue without Kibana session
-                    # Loop continues to retry
-            finally:
-                progress.accept()
+                    QtWidgets.QApplication.processEvents()  # Allow UI to update
+                    # Loop continues to allow retry
+            except Exception as e:
+                # Handle authentication exceptions
+                self.output.setPlainText(
+                    f"❌ Authentication error: {str(e)}\n\n"
+                    "You can try again by entering different credentials, or cancel to skip Kibana authentication."
+                )
+                QtWidgets.QApplication.processEvents()  # Allow UI to update
+                # Loop continues to allow retry
 
     def _ensure_authentication(self) -> bool:
         """
@@ -676,7 +784,7 @@ class App(QtWidgets.QWidget):
             if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
                 return False
             if cred_mgr.has_kibana_cookie():
-                self.output.setPlainText("✓ Certificate and Kibana session configured successfully!")
+                self.output.setPlainText("Certificate and Kibana session configured!")
 
         # Update client.py to use the configured certificates
         if cert_files := cred_mgr.get_certificate_files():
@@ -711,7 +819,31 @@ class App(QtWidgets.QWidget):
 
     def _with_ctx(self, instance_id: str, call_fn):
         """Runs call_fn(api_url, api_token) with cached context if fresh."""
-        ctx = self._ctx if self._ctx_is_valid(instance_id) else self._fetch_ctx(instance_id)
+        # Cache context to avoid repeated validation overhead
+        if not hasattr(self, "_ctx_cache"):
+            self._ctx_cache = {}
+
+        cache_key = instance_id
+        current_time = time.time()
+
+        # Check cache first
+        if cache_key in self._ctx_cache:
+            cached_ctx, cache_time = self._ctx_cache[cache_key]
+            if (current_time - cache_time) < self._ctx_ttl_seconds and self._ctx_is_valid_for_instance(
+                cached_ctx, instance_id
+            ):
+                ctx = cached_ctx
+            else:
+                # Cache expired
+                ctx = self._fetch_ctx(instance_id)
+                self._ctx_cache[cache_key] = (ctx, current_time)
+        else:
+            ctx = self._fetch_ctx(instance_id)
+            self._ctx_cache[cache_key] = (ctx, current_time)
+
+        # Update main context for backward compatibility
+        self._ctx = ctx
+
         token = ctx.get("api_token", "")
         if not token or token == "apiToken not found" or token.startswith("HTTP "):
             return {"ctx": ctx, "error": f"Failed to get apiToken: {token}"}
@@ -744,10 +876,10 @@ class App(QtWidgets.QWidget):
         self._run_async("Fetching information...", work)
 
     def run_get_instance_state(self):
-        self._run_simple_api_call("Fetching Instance State...", ga.get_instance_state)
+        self._run_mapped_api_call("run_get_instance_state")
 
     def run_get_instance_settings(self):
-        self._run_simple_api_call("Fetching Instance Settings...", ga.get_instance_settings)
+        self._run_mapped_api_call("run_get_instance_settings")
 
     def run_set_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -812,7 +944,7 @@ class App(QtWidgets.QWidget):
         self._run_async("Rebooting instance...", work)
 
     def run_get_qr_code(self):
-        self._run_simple_api_call("Fetching QR code...", ga.get_qr_code)
+        self._run_mapped_api_call("run_get_qr_code")
 
     def run_get_wa_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -833,30 +965,10 @@ class App(QtWidgets.QWidget):
     # Journal API methods
 
     def run_get_incoming_msgs_journal(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-        if not self._ensure_authentication():
-            return
-        self._run_async(
-            "Fetching Incoming Messages Journal...",
-            lambda: self._with_ctx(
-                instance_id, lambda u, t: ga.get_incoming_msgs_journal(u, instance_id, t, minutes=1440)
-            ),
-        )
+        self._run_mapped_api_call("run_get_incoming_msgs_journal")
 
     def run_get_outgoing_msgs_journal(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id:
-            return
-        if not self._ensure_authentication():
-            return
-        self._run_async(
-            "Fetching Outgoing Messages Journal...",
-            lambda: self._with_ctx(
-                instance_id, lambda u, t: ga.get_outgoing_msgs_journal(u, instance_id, t, minutes=1440)
-            ),
-        )
+        self._run_mapped_api_call("run_get_outgoing_msgs_journal")
 
     def run_get_chat_history(self):
         instance_id = self._get_instance_id_or_warn()
@@ -914,10 +1026,10 @@ class App(QtWidgets.QWidget):
     # Queue API methods
 
     def run_get_msg_queue_count(self):
-        self._run_simple_api_call("Fetching Message Queue Count...", ga.get_msg_queue_count)
+        self._run_mapped_api_call("run_get_msg_queue_count")
 
     def run_get_msg_queue(self):
-        self._run_simple_api_call("Fetching Messages Queued to Send...", ga.get_msg_queue)
+        self._run_mapped_api_call("run_get_msg_queue")
 
     def run_clear_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
@@ -951,7 +1063,7 @@ class App(QtWidgets.QWidget):
         self._run_async("Clearing Message Queue to Send...", work)
 
     def run_get_webhook_count(self):
-        self._run_simple_api_call("Fetching Webhook Count...", ga.get_webhook_count)
+        self._run_mapped_api_call("run_get_webhook_count")
 
     def run_clear_webhooks(self):
         instance_id = self._get_instance_id_or_warn()
@@ -995,22 +1107,10 @@ class App(QtWidgets.QWidget):
     # Status API methods
 
     def run_get_incoming_statuses(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id or not self._ensure_authentication():
-            return
-        self._run_async(
-            "Fetching Incoming Statuses...",
-            lambda: self._with_ctx(instance_id, lambda u, t: ga.get_incoming_statuses(u, instance_id, t, minutes=1440)),
-        )
+        self._run_mapped_api_call("run_get_incoming_statuses")
 
     def run_get_outgoing_statuses(self):
-        instance_id = self._get_instance_id_or_warn()
-        if not instance_id or not self._ensure_authentication():
-            return
-        self._run_async(
-            "Fetching Outgoing Statuses...",
-            lambda: self._with_ctx(instance_id, lambda u, t: ga.get_outgoing_statuses(u, instance_id, t, minutes=1440)),
-        )
+        self._run_mapped_api_call("run_get_outgoing_statuses")
 
     def run_get_status_statistic(self):
         instance_id = self._get_instance_id_or_warn()
@@ -1033,6 +1133,18 @@ class App(QtWidgets.QWidget):
             )
 
         self._run_async(f"Fetching Status Statistic for {id_message}...", work)
+
+    @QtCore.Slot(dict)
+    def _on_update_available(self, update_info: dict):
+        """Handle when a new update is available."""
+        # Show update notification in a non-blocking way
+        QtCore.QTimer.singleShot(100, lambda: self.update_manager.show_update_dialog(update_info, self))
+
+    @QtCore.Slot(str)
+    def _on_update_error(self, error_msg: str):
+        """Handle update check errors (silently ignore for now)."""
+        # Could log to console or show subtle notification if needed
+        print(f"Update check failed: {error_msg}")
 
 
 if __name__ == "__main__":

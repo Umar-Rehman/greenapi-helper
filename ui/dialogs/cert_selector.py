@@ -177,7 +177,9 @@ class CertificateSelectorDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(
-                self, "Error Loading Certificates", f"Failed to load certificates from Windows store:\n{str(e)}"
+                self,
+                "Error Loading Certificates",
+                f"Failed to load certificates from Windows store:\n{str(e)}",
             )
 
     def _on_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem):
@@ -281,5 +283,9 @@ class CertificateSelectorDialog(QDialog):
             import traceback
 
             traceback.print_exc()
-            QMessageBox.critical(self, "Error Exporting Certificate", f"Failed to export certificate:\n{str(e)}")
+            QMessageBox.critical(
+                self,
+                "Error Exporting Certificate",
+                f"Failed to export certificate:\n{str(e)}",
+            )
             return None

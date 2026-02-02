@@ -158,26 +158,46 @@ def get_wa_settings(api_url: str, instance_id: str, api_token: str) -> str:
 
 def get_incoming_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
-        api_url, instance_id, api_token, "lastIncomingMessages", "GET", query_params={"minutes": minutes}
+        api_url,
+        instance_id,
+        api_token,
+        "lastIncomingMessages",
+        "GET",
+        query_params={"minutes": minutes},
     )
 
 
 def get_outgoing_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
-        api_url, instance_id, api_token, "lastOutgoingMessages", "GET", query_params={"minutes": minutes}
+        api_url,
+        instance_id,
+        api_token,
+        "lastOutgoingMessages",
+        "GET",
+        query_params={"minutes": minutes},
     )
 
 
 def get_chat_history(api_url: str, instance_id: str, api_token: str, chat_id: str, count: int = 10) -> str:
     """Retrieve chat history for a specific chat."""
     return make_api_call(
-        api_url, instance_id, api_token, "getChatHistory", "POST", json_body={"chatId": chat_id, "count": count}
+        api_url,
+        instance_id,
+        api_token,
+        "getChatHistory",
+        "POST",
+        json_body={"chatId": chat_id, "count": count},
     )
 
 
 def get_message(api_url: str, instance_id: str, api_token: str, chat_id: str, id_message: str) -> str:
     return make_api_call(
-        api_url, instance_id, api_token, "getMessage", "POST", json_body={"chatId": chat_id, "idMessage": id_message}
+        api_url,
+        instance_id,
+        api_token,
+        "getMessage",
+        "POST",
+        json_body={"chatId": chat_id, "idMessage": id_message},
     )
 
 
@@ -209,17 +229,32 @@ def clear_webhooks_queue(api_url: str, instance_id: str, api_token: str) -> str:
 
 def get_outgoing_statuses(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
-        api_url, instance_id, api_token, "getOutgoingStatuses", "GET", query_params={"minutes": minutes}
+        api_url,
+        instance_id,
+        api_token,
+        "getOutgoingStatuses",
+        "GET",
+        query_params={"minutes": minutes},
     )
 
 
 def get_incoming_statuses(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
-        api_url, instance_id, api_token, "getIncomingStatuses", "GET", query_params={"minutes": minutes}
+        api_url,
+        instance_id,
+        api_token,
+        "getIncomingStatuses",
+        "GET",
+        query_params={"minutes": minutes},
     )
 
 
 def get_status_statistic(api_url: str, instance_id: str, api_token: str, id_message: str) -> str:
     return make_api_call(
-        api_url, instance_id, api_token, "getStatusStatistic", "GET", query_params={"idMessage": id_message}
+        api_url,
+        instance_id,
+        api_token,
+        "getStatusStatistic",
+        "GET",
+        query_params={"idMessage": id_message},
     )

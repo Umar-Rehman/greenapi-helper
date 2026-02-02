@@ -17,7 +17,9 @@ KIBANA_AUTH_PATHS = ["/internal/security/me", "/api/security/v1/me", "/api/statu
 # Helper functions
 
 
-def get_kibana_session_cookie(cert_files: Optional[Tuple[str, str]] = None) -> Optional[str]:
+def get_kibana_session_cookie(
+    cert_files: Optional[Tuple[str, str]] = None,
+) -> Optional[str]:
     """
     Automatically authenticate to Kibana using certificate and retrieve session cookie.
 
@@ -279,7 +281,11 @@ def _try_kibana_auth_with_key(cert_files: Optional[Tuple[str, str]]) -> Optional
             return None
 
         resp = requests.get(
-            f"{KIBANA_URL}/api/status", cert=cert, verify=True, timeout=10, allow_redirects=True  # Both cert and key
+            f"{KIBANA_URL}/api/status",
+            cert=cert,
+            verify=True,
+            timeout=10,
+            allow_redirects=True,  # Both cert and key
         )
 
         if resp.status_code == 200:
@@ -334,7 +340,9 @@ def _extract_session_cookie(response) -> Optional[str]:
 
 
 def get_api_token(
-    instance_id: str, kibana_cookie: Optional[str] = None, cert_files: Optional[Tuple[str, str]] = None
+    instance_id: str,
+    kibana_cookie: Optional[str] = None,
+    cert_files: Optional[Tuple[str, str]] = None,
 ) -> str:
     """
     Retrieve the API token for the given instance_id by querying the ELK stack.
@@ -508,7 +516,9 @@ $resp.Content
         return {"error": f"ERROR: {e}"}
 
 
-def _get_thumbprint_from_cert_files(cert_files: Optional[Tuple[str, str]]) -> Optional[str]:
+def _get_thumbprint_from_cert_files(
+    cert_files: Optional[Tuple[str, str]],
+) -> Optional[str]:
     """Compute certificate thumbprint from PEM file for store lookup."""
     try:
         from cryptography import x509

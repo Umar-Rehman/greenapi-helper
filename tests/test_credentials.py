@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch, MagicMock
 from greenapi import credentials
 
@@ -18,10 +17,11 @@ class TestCredentialManager:
         cert_pem = b"-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----"
         cert_context = MagicMock()
 
-        with patch('tempfile.mkdtemp', return_value='/tmp/test'), \
-             patch('pathlib.Path.write_bytes'), \
-             patch.object(mgr, '_export_private_key', return_value=True), \
-             patch.object(mgr, '_obtain_kibana_session'):
+        with patch("tempfile.mkdtemp", return_value="/tmp/test"), patch(
+            "pathlib.Path.write_bytes"
+        ), patch.object(mgr, "_export_private_key", return_value=True), patch.object(
+            mgr, "_obtain_kibana_session"
+        ):
             result = mgr.set_certificate(cert_pem, cert_context)
             assert result is True
 
@@ -33,8 +33,8 @@ class TestCredentialManager:
     def test_cleanup(self):
         """Test cleanup functionality."""
         mgr = credentials.CredentialManager()
-        with patch('os.path.exists', return_value=True), \
-             patch('os.unlink'), \
-             patch('shutil.rmtree'):
+        with patch("os.path.exists", return_value=True), patch("os.unlink"), patch(
+            "shutil.rmtree"
+        ):
             mgr.cleanup()
             # Should not raise exceptions
