@@ -123,7 +123,11 @@ foreach ($p in $paths) {{
 """
 
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=20
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
         if result.returncode != 0:
@@ -201,6 +205,7 @@ foreach ($p in @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})) {{
             text=True,
             timeout=20,
             env=env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
         if result.returncode != 0:
@@ -486,6 +491,7 @@ $resp.Content
             text=True,
             timeout=70,
             env=env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
         if result.returncode != 0:

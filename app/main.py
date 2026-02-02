@@ -411,21 +411,29 @@ class App(QtWidgets.QWidget):
 
         # Try environment credentials first
         if env_username and env_password:
-            self.output.setPlainText(
-                "⚠ Certificate configured.\n" "Authenticating with credentials from environment..."
-            )
-            cookie = get_kibana_session_cookie_with_password(
-                env_username, env_password, cred_mgr.get_certificate_files()
-            )
-            if cookie:
-                cred_mgr.set_kibana_cookie(cookie)
-                self.output.setPlainText("✓ Certificate and Kibana session configured!")
-                return True
-            else:
-                self.output.setPlainText(
-                    "⚠ Automatic login with environment credentials failed.\n"
-                    "Please enter your credentials manually..."
+            # Show progress dialog for authentication
+            progress = QtWidgets.QProgressDialog("Authenticating with Kibana...", None, 0, 0, self)
+            progress.setWindowModality(QtCore.Qt.WindowModal)
+            progress.setWindowTitle("Authentication")
+            progress.setCancelButton(None)  # No cancel button
+            progress.setMinimumDuration(0)  # Show immediately
+            progress.show()
+
+            try:
+                cookie = get_kibana_session_cookie_with_password(
+                    env_username, env_password, cred_mgr.get_certificate_files()
                 )
+                if cookie:
+                    cred_mgr.set_kibana_cookie(cookie)
+                    self.output.setPlainText("✓ Certificate and Kibana session configured!")
+                    return True
+                else:
+                    self.output.setPlainText(
+                        "⚠ Automatic login with environment credentials failed.\n"
+                        "Please enter your credentials manually..."
+                    )
+            finally:
+                progress.close()
 
         # Prompt for credentials with retry loop
         prefill_username = env_username or ""
@@ -440,32 +448,42 @@ class App(QtWidgets.QWidget):
             username, password = login_dialog.get_credentials()
             prefill_username = username  # Remember username for retry
 
-            self.output.setPlainText(f"Authenticating as {username}...")
-            cookie = get_kibana_session_cookie_with_password(username, password, cred_mgr.get_certificate_files())
+            # Show progress dialog for manual authentication
+            progress = QtWidgets.QProgressDialog(f"Authenticating as {username}...", None, 0, 0, self)
+            progress.setWindowModality(QtCore.Qt.WindowModal)
+            progress.setWindowTitle("Authentication")
+            progress.setCancelButton(None)  # No cancel button
+            progress.setMinimumDuration(0)  # Show immediately
+            progress.show()
 
-            if cookie:
-                cred_mgr.set_kibana_cookie(cookie)
-                self.output.setPlainText("✓ Certificate and Kibana session configured!")
-                return True
-            else:
-                # Authentication failed - ask if user wants to retry
-                reply = QtWidgets.QMessageBox.question(
-                    self,
-                    "Authentication Failed",
-                    "Kibana authentication failed. This could be due to:\n"
-                    "• Incorrect username or password\n"
-                    "• Network issues\n"
-                    "• Certificate problems\n\n"
-                    "Would you like to try again?",
-                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                )
+            try:
+                cookie = get_kibana_session_cookie_with_password(username, password, cred_mgr.get_certificate_files())
 
-                if reply != QtWidgets.QMessageBox.Yes:
-                    self.output.setPlainText(
-                        "⚠ Kibana authentication skipped.\n" "API calls may fail. You can try again later."
+                if cookie:
+                    cred_mgr.set_kibana_cookie(cookie)
+                    self.output.setPlainText("✓ Certificate and Kibana session configured!")
+                    return True
+                else:
+                    # Authentication failed - ask if user wants to retry
+                    reply = QtWidgets.QMessageBox.question(
+                        self,
+                        "Authentication Failed",
+                        "Kibana authentication failed. This could be due to:\n"
+                        "• Incorrect username or password\n"
+                        "• Network issues\n"
+                        "• Certificate problems\n\n"
+                        "Would you like to try again?",
+                        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                     )
-                    return True  # Allow user to continue without Kibana session
-                # Loop continues to retry
+
+                    if reply != QtWidgets.QMessageBox.Yes:
+                        self.output.setPlainText(
+                            "⚠ Kibana authentication skipped.\n" "API calls may fail. You can try again later."
+                        )
+                        return True  # Allow user to continue without Kibana session
+                    # Loop continues to retry
+            finally:
+                progress.close()
 
     def _ensure_authentication(self) -> bool:
         """
