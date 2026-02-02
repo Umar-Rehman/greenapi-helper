@@ -1,8 +1,8 @@
 {
-  "version": "1.1.0",
-  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.1.0/greenapi-helper.exe",
+  "version": "1.2.0",
+  "download_url": "https://your-public-server.com/greenapi-helper.exe",
   "changelog_url": "https://github.com/Umar-Rehman/greenapi-helper/releases",
   "minimum_version": "1.0.0",
   "release_date": "2026-02-02",
-  "notes": "Initial release with certificate management and API integration. Now includes automatic self-updating!"
+  "notes": "Removed emojis from user interface for cleaner appearance. Improved accessibility and professional look."
 }

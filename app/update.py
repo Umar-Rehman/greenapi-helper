@@ -35,7 +35,9 @@ class UpdateManager(QtCore.QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.version_url = "https://raw.githubusercontent.com/Umar-Rehman/greenapi-helper/main/version.json"
+        # For private repos, use GitHub API with personal access token
+        self.version_url = "https://api.github.com/repos/Umar-Rehman/greenapi-helper/releases/latest"
+        self.github_token = os.environ.get("GITHUB_TOKEN")  # Get from environment variable
         self.check_interval_hours = 24  # Check once per day
 
     def check_for_updates(self) -> None:
@@ -46,18 +48,49 @@ class UpdateManager(QtCore.QObject):
     def _perform_update_check(self) -> None:
         """Perform the actual update check."""
         try:
-            with urllib.request.urlopen(self.version_url, timeout=10) as response:
+            # Create request with authentication if token is provided
+            req = urllib.request.Request(self.version_url)
+            if self.github_token:
+                req.add_header('Authorization', f'token {self.github_token}')
+                req.add_header('Accept', 'application/vnd.github.v3+json')
+
+            with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode("utf-8"))
 
-            remote_version = data.get("version", "0.0.0")
+            # Parse GitHub release format
+            remote_version = data.get("tag_name", "").lstrip("v")  # Remove 'v' prefix if present
+            if not remote_version:
+                self.update_error.emit("Could not parse version from GitHub release")
+                return
+
             if self._is_newer_version(remote_version, get_current_version()):
-                self.update_available.emit(data)
+                # Convert GitHub release format to our expected format
+                update_info = {
+                    "version": remote_version,
+                    "download_url": self._get_download_url_from_release(data),
+                    "changelog_url": data.get("html_url", ""),
+                    "minimum_version": "1.0.0",  # You can set this in release body or tags
+                    "release_date": data.get("published_at", ""),
+                    "notes": data.get("body", "New version available")
+                }
+                self.update_available.emit(update_info)
             # If versions are the same or local is newer, do nothing
 
         except (urllib.error.URLError, json.JSONDecodeError, KeyError) as e:
             self.update_error.emit(f"Failed to check for updates: {str(e)}")
         except Exception as e:
             self.update_error.emit(f"Unexpected error during update check: {str(e)}")
+
+    def _get_download_url_from_release(self, release_data: dict) -> str:
+        """Extract the download URL for the executable from GitHub release assets."""
+        assets = release_data.get("assets", [])
+        for asset in assets:
+            if asset.get("name") == "greenapi-helper.exe":
+                return asset.get("browser_download_url", "")
+
+        # Fallback: construct URL from release info
+        tag_name = release_data.get("tag_name", "")
+        return f"https://github.com/Umar-Rehman/greenapi-helper/releases/download/{tag_name}/greenapi-helper.exe"
 
     def _is_newer_version(self, remote: str, local: str) -> bool:
         """Compare version strings to determine if remote is newer than local."""
