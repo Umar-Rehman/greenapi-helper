@@ -377,6 +377,7 @@ del "%~f0"
 
                 # Exit after a short delay to show the message
                 import time
+
                 time.sleep(2)
                 logger.info("Exiting application now")
                 QtWidgets.QApplication.quit()
