@@ -1,14 +1,17 @@
 # Green API Helper
 
-A desktop application for managing Green API instances with certificate-based authentication and Kibana integration.
+A desktop application for managing and examining Green API instances through secure API calls, featuring certificate-based authentication and Kibana integration for monitoring.
 
 ## Features
 
-- **Instance Management**: Configure and manage Green API instances
-- **Certificate Authentication**: Secure authentication using Windows certificate store
-- **Kibana Integration**: Direct access to ELK stack logs and monitoring
-- **QR Code Generation**: Easy instance configuration with QR codes, and settings
-- **Message Handling**: Send, receive, and view specific messages and message history, as well as queued messages and webhooks.
+- **Instance Management**: Configure, monitor, and control Green API instances including state, settings, and lifecycle operations
+- **Certificate Authentication**: Secure authentication using Windows certificate store for API access
+- **Kibana Integration**: Direct access to ELK stack logs and monitoring for instance diagnostics
+- **QR Code Management**: Generate and manage QR codes for instance setup and configuration
+- **Message Journaling**: Examine incoming and outgoing message journals, chat history, and specific messages
+- **Queue Management**: Monitor and manage message queues, webhooks, and status updates
+- **Webhook Configuration**: Set up, modify, and clear webhook endpoints for real-time notifications
+- **Status Monitoring**: Track message delivery statuses and statistics
 
 ## Installation
 
@@ -50,14 +53,20 @@ python -m app.main
 1. **Launch the Application**
    - Run `greenapi-helper.exe` or `python -m app.main`
 
-2. **Certificate Authentication**
+2. **Authentication**
    - Select your client certificate from the Windows store
-   - The app will automatically authenticate with Kibana
+   - The app will automatically authenticate with Kibana for monitoring access
 
 3. **Instance Management**
-   - Enter your Green API instance ID
-   - Configure webhooks and settings
-   - Send/receive/view messages
+   - Enter your Green API instance ID (10-digit number)
+   - Use the Account tab to manage instance lifecycle (settings, reboot, logout)
+   - Monitor instance state and configuration
+   - Generate QR codes for WhatsApp Business API setup
+
+4. **Examination and Monitoring**
+   - **Journals Tab**: Review message history, incoming/outgoing journals, and specific chat interactions
+   - **Queues Tab**: Monitor queued messages, webhook status, and manage queue operations
+   - **Statuses Tab**: Track message delivery statuses and statistics
 
 ## Development
 
@@ -92,7 +101,7 @@ greenapi-helper/
 │   ├── elk_auth.py        # Kibana authentication
 │   └── api_url_resolver.py # URL resolution logic
 ├── ui/                    # User interface components
-│   └── dialogs/           # Dialog windows
+│   └── dialogs/           # Dialog windows for forms and settings
 ├── tests/                 # Test suite
 └── .github/workflows/     # CI/CD configuration
 ```
