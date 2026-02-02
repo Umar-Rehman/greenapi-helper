@@ -1,8 +1,8 @@
 {
   "version": "1.4.2",
-  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.4.0/greenapi-helper.exe",
+  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.4.2/greenapi-helper.exe",
   "changelog_url": "https://github.com/Umar-Rehman/greenapi-helper/releases",
   "minimum_version": "1.0.0",
   "release_date": "2026-02-02",
-  "notes": "Added automatic self-updating functionality! Applications will now check for and install updates automatically from GitHub releases."
+  "notes": "Test release for auto-update functionality. Applications with auto-update enabled will detect and install this update automatically."
 }

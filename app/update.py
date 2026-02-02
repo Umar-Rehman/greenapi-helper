@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import tempfile
-import shutil
 import subprocess
 import urllib.request
 import urllib.error
@@ -111,45 +110,85 @@ class UpdateManager(QtCore.QObject):
             # If version parsing fails, assume no update available
             return False
 
-    def perform_self_update(self, download_url: str) -> bool:
-        """Download and install update automatically."""
+    def perform_self_update(self, download_url: str, parent_widget: QtWidgets.QWidget) -> bool:
+        """Download and install update automatically with progress feedback."""
         try:
+            # Create progress dialog
+            progress_dialog = QtWidgets.QProgressDialog("Preparing update...", "Cancel", 0, 100, parent_widget)
+            progress_dialog.setWindowModality(QtCore.Qt.WindowModal)
+            progress_dialog.setAutoClose(False)
+            progress_dialog.setAutoReset(False)
+            progress_dialog.show()
+
             # Download the update
-            temp_path = self._download_update(download_url)
+            progress_dialog.setLabelText("Downloading update...")
+            temp_path = self._download_update_with_progress(download_url, progress_dialog)
             if not temp_path:
+                progress_dialog.close()
                 return False
 
             # Create and run updater script
+            progress_dialog.setLabelText("Preparing installation...")
+            progress_dialog.setValue(90)
             updater_script = self._create_updater_script(temp_path)
             if not updater_script:
+                progress_dialog.close()
                 return False
 
+            # Show completion message
+            progress_dialog.setLabelText("Update ready! Application will restart...")
+            progress_dialog.setValue(100)
+            progress_dialog.setCancelButtonText("Close")
+
+            # Wait a moment to show completion
+            QtCore.QTimer.singleShot(1500, progress_dialog.close)
+
             # Launch updater and exit current app
-            subprocess.Popen([updater_script], shell=True)
-            QtCore.QTimer.singleShot(1000, QtWidgets.QApplication.quit)  # Give time for updater to start
+            QtCore.QTimer.singleShot(2000, lambda: subprocess.Popen([updater_script], shell=True))
+            QtCore.QTimer.singleShot(2500, QtWidgets.QApplication.quit)  # Give time for updater to start
             return True
 
         except Exception as e:
-            self.update_error.emit(f"Failed to perform self-update: {str(e)}")
+            QtWidgets.QMessageBox.critical(parent_widget, "Update Failed", f"Failed to perform update: {str(e)}")
             return False
 
-    def _download_update(self, download_url: str) -> Optional[str]:
-        """Download the update executable to a temporary location."""
+    def _download_update_with_progress(
+        self, download_url: str, progress_dialog: QtWidgets.QProgressDialog
+    ) -> Optional[str]:
+        """Download the update executable to a temporary location with progress feedback."""
         try:
             # Create temp file
             temp_fd, temp_path = tempfile.mkstemp(suffix=".exe")
             os.close(temp_fd)  # Close the file descriptor
 
-            # Download the file
+            # Download the file with progress
             with urllib.request.urlopen(download_url, timeout=30) as response:
-                with open(temp_path, "wb") as f:
-                    shutil.copyfileobj(response, f)
+                total_size = int(response.headers.get("content-length", 0))
+                downloaded = 0
 
+                with open(temp_path, "wb") as f:
+                    while True:
+                        if progress_dialog.wasCanceled():
+                            os.unlink(temp_path)
+                            return None
+
+                        chunk = response.read(8192)
+                        if not chunk:
+                            break
+
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        if total_size > 0:
+                            progress = int((downloaded / total_size) * 80)  # 80% for download
+                            progress_dialog.setValue(progress)
+
+            progress_dialog.setValue(80)  # Ensure we show 80% completion
             return temp_path
 
         except Exception as e:
-            self.update_error.emit(f"Failed to download update: {str(e)}")
-            return None
+            progress_dialog.close()
+            raise e
 
     def _create_updater_script(self, new_exe_path: str) -> Optional[str]:
         """Create a batch script that will replace the current executable and restart."""
@@ -224,13 +263,10 @@ del "%~f0"
         # Handle button clicks based on return value
         if result == QtWidgets.QMessageBox.AcceptRole and download_url:
             # Update Now button clicked
-            success = self.perform_self_update(download_url)
+            success = self.perform_self_update(download_url, parent)
             if success:
-                QtWidgets.QMessageBox.information(
-                    parent,
-                    "Update Started",
-                    "The application will now update and restart automatically.\nThis may take a few moments...",
-                )
+                # Progress dialog will handle the user feedback
+                pass
         elif result == QtWidgets.QMessageBox.ActionRole and download_url:
             # Download Manually button clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
