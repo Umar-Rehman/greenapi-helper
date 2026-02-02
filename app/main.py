@@ -286,8 +286,8 @@ class App(QtWidgets.QWidget):
 
         # Handle QR response types
         if isinstance(data, dict) and (t := data.get("type")) in {"alreadyLogged", "error", "qrCode"}:
-            instance_id = self._ctx.get('instance_id', '')
-            api_token = self._ctx.get('api_token', '')
+            instance_id = self._ctx.get("instance_id", "")
+            api_token = self._ctx.get("api_token", "")
             qr_link = f"https://qr.green-api.com/wainstance{instance_id}/{api_token}"
             if t == "alreadyLogged":
                 self.output.setPlainText(
