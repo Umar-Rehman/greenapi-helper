@@ -604,16 +604,12 @@ class App(QtWidgets.QWidget):
             username, password = login_dialog.get_credentials()
             prefill_username = username  # Remember username for retry
 
-            # Show progress dialog for manual authentication
-            progress = QtWidgets.QMessageBox(self)
-            progress.setWindowTitle("Authentication")
-            progress.setText(
-                f"Authenticating as {username} with Kibana...\n\n"
+            # Show authentication message in output area
+            self.output.setPlainText(
+                f"🔐 Authenticating as {username} with Kibana...\n\n"
                 "Please wait while we establish a secure connection using your certificate."
             )
-            progress.setStandardButtons(QtWidgets.QMessageBox.NoButton)  # No buttons
-            progress.setWindowModality(QtCore.Qt.WindowModal)
-            progress.show()
+            QtWidgets.QApplication.processEvents()  # Allow UI to update
 
             try:
                 cookie = get_kibana_session_cookie_with_password(username, password, cred_mgr.get_certificate_files())
@@ -623,26 +619,24 @@ class App(QtWidgets.QWidget):
                     self.output.setPlainText("Certificate and Kibana session configured!")
                     return True
                 else:
-                    # Authentication failed - ask if user wants to retry
-                    reply = QtWidgets.QMessageBox.question(
-                        self,
-                        "Authentication Failed",
-                        "Kibana authentication failed. This could be due to:\n"
+                    # Authentication failed - show message and allow retry
+                    self.output.setPlainText(
+                        "❌ Kibana authentication failed. This could be due to:\n"
                         "• Incorrect username or password\n"
                         "• Network issues\n"
                         "• Certificate problems\n\n"
-                        "Would you like to try again?",
-                        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                        "You can try again by entering different credentials, or cancel to skip Kibana authentication."
                     )
-
-                    if reply != QtWidgets.QMessageBox.Yes:
-                        self.output.setPlainText(
-                            "⚠ Kibana authentication skipped.\n" "API calls may fail. You can try again later."
-                        )
-                        return True  # Allow user to continue without Kibana session
-                    # Loop continues to retry
-            finally:
-                progress.accept()
+                    QtWidgets.QApplication.processEvents()  # Allow UI to update
+                    # Loop continues to allow retry
+            except Exception as e:
+                # Handle authentication exceptions
+                self.output.setPlainText(
+                    f"❌ Authentication error: {str(e)}\n\n"
+                    "You can try again by entering different credentials, or cancel to skip Kibana authentication."
+                )
+                QtWidgets.QApplication.processEvents()  # Allow UI to update
+                # Loop continues to allow retry
 
     def _ensure_authentication(self) -> bool:
         """
