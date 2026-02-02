@@ -113,6 +113,16 @@ class UpdateManager(QtCore.QObject):
     def perform_self_update(self, download_url: str, parent_widget: QtWidgets.QWidget) -> bool:
         """Download and install update automatically with progress feedback."""
         try:
+            # Check if running from source - self-update only works with frozen executables
+            if not getattr(sys, "frozen", False):
+                QtWidgets.QMessageBox.information(
+                    parent_widget,
+                    "Update Not Available",
+                    "Self-update is only available when running the installed executable.\n\n"
+                    "Please download the update manually from the GitHub releases page."
+                )
+                return False
+
             # Create progress dialog
             progress_dialog = QtWidgets.QProgressDialog("Preparing update...", "Cancel", 0, 100, parent_widget)
             progress_dialog.setWindowModality(QtCore.Qt.WindowModal)
@@ -157,18 +167,23 @@ class UpdateManager(QtCore.QObject):
     ) -> Optional[str]:
         """Download the update executable to a temporary location with progress feedback."""
         try:
+            print(f"DEBUG: Starting download from URL: {download_url}")  # Debug logging
+
             # Create temp file
             temp_fd, temp_path = tempfile.mkstemp(suffix=".exe")
             os.close(temp_fd)  # Close the file descriptor
+            print(f"DEBUG: Created temp file: {temp_path}")  # Debug logging
 
             # Download the file with progress
             with urllib.request.urlopen(download_url, timeout=30) as response:
                 total_size = int(response.headers.get("content-length", 0))
                 downloaded = 0
+                print(f"DEBUG: Total size: {total_size} bytes")  # Debug logging
 
                 with open(temp_path, "wb") as f:
                     while True:
                         if progress_dialog.wasCanceled():
+                            print("DEBUG: Download cancelled by user")  # Debug logging
                             os.unlink(temp_path)
                             return None
 
@@ -182,11 +197,14 @@ class UpdateManager(QtCore.QObject):
                         if total_size > 0:
                             progress = int((downloaded / total_size) * 80)  # 80% for download
                             progress_dialog.setValue(progress)
+                            print(f"DEBUG: Downloaded {downloaded}/{total_size} bytes ({progress}%)")  # Debug logging
 
             progress_dialog.setValue(80)  # Ensure we show 80% completion
+            print(f"DEBUG: Download completed successfully")  # Debug logging
             return temp_path
 
         except Exception as e:
+            print(f"DEBUG: Download failed with error: {str(e)}")  # Debug logging
             progress_dialog.close()
             raise e
 
@@ -197,19 +215,26 @@ class UpdateManager(QtCore.QObject):
             if getattr(sys, "frozen", False):
                 # Running as PyInstaller executable
                 current_exe = sys.executable
+                print(f"DEBUG: Running as frozen executable: {current_exe}")  # Debug logging
             else:
                 # Running from source - try to find the executable in dist folder
                 app_dir = os.path.dirname(os.path.dirname(__file__))
                 current_exe = os.path.join(app_dir, "dist", "greenapi-helper.exe")
+                print(f"DEBUG: Running from source, looking for executable: {current_exe}")  # Debug logging
                 if not os.path.exists(current_exe):
                     # If dist doesn't exist, we can't self-update from source
+                    print(f"DEBUG: Executable not found at: {current_exe}")  # Debug logging
                     self.update_error.emit(
                         "Cannot perform self-update when running from source. Please use manual download."
                     )
                     return None
 
+            print(f"DEBUG: Current executable: {current_exe}")  # Debug logging
+            print(f"DEBUG: New executable temp path: {new_exe_path}")  # Debug logging
+
             # Create updater batch script
             updater_script = os.path.join(tempfile.gettempdir(), "greenapi_updater.bat")
+            print(f"DEBUG: Updater script path: {updater_script}")  # Debug logging
 
             script_content = f"""@echo off
 echo Updating Green API Helper...
@@ -232,9 +257,11 @@ del "%~f0"
             with open(updater_script, "w") as f:
                 f.write(script_content)
 
+            print(f"DEBUG: Updater script created successfully")  # Debug logging
             return updater_script
 
         except Exception as e:
+            print(f"DEBUG: Failed to create updater script: {str(e)}")  # Debug logging
             self.update_error.emit(f"Failed to create updater script: {str(e)}")
             return None
 
@@ -251,26 +278,37 @@ del "%~f0"
         msg_box.setText(f"A new version ({version}) is available!")
         msg_box.setInformativeText(f"Current version: {get_current_version()}\n\n{notes}")
 
-        # Add buttons
-        msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
-        msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
-        msg_box.addButton("View Changelog", QtWidgets.QMessageBox.HelpRole)
-        msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
+        # Check if self-update is available
+        can_self_update = getattr(sys, "frozen", False)
+
+        if can_self_update:
+            # Add buttons for frozen executable
+            msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
+            msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
+            msg_box.addButton("View Changelog", QtWidgets.QMessageBox.HelpRole)
+            msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
+        else:
+            # Add buttons for source/development version
+            msg_box.addButton("Download Manually", QtWidgets.QMessageBox.AcceptRole)
+            msg_box.addButton("View Changelog", QtWidgets.QMessageBox.ActionRole)
+            msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
 
         # Execute dialog and get result
         result = msg_box.exec()
 
         # Handle button clicks based on return value
-        if result == QtWidgets.QMessageBox.AcceptRole and download_url:
-            # Update Now button clicked
+        if can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url:
+            # Update Now button clicked (only available for frozen executables)
             success = self.perform_self_update(download_url, parent)
             if success:
                 # Progress dialog will handle the user feedback
                 pass
-        elif result == QtWidgets.QMessageBox.ActionRole and download_url:
+        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url) or \
+             (can_self_update and result == QtWidgets.QMessageBox.ActionRole and download_url):
             # Download Manually button clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
-        elif result == QtWidgets.QMessageBox.HelpRole and changelog_url:
+        elif (can_self_update and result == QtWidgets.QMessageBox.HelpRole and changelog_url) or \
+             (not can_self_update and result == QtWidgets.QMessageBox.ActionRole and changelog_url):
             # View Changelog button clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
         # RejectRole (Later) or other cases - just close dialog
