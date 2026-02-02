@@ -10,12 +10,14 @@ class PoolRule:
     A rule that can match a pool code (e.g. 7103, 7700, 5500, 5700, 3100, 3500).
     If direct_host is set, we can return it; otherwise we return default_host.
     """
+
     default_host: str
     direct_host: Optional[str] = None
     path_prefix: str = ""  # e.g. "/v3"
 
 
-# ---- Rules derived from documentation https://wiki.yandex.ru/b/biznes-processyh/texnicheskajapod/kurs-podgotovki-specialista-texnicheskojj-podderzh/oznakomlenie-s-texnicheskojj-chastju-servisa/----
+# ---- Rules derived from documentation
+# https://wiki.yandex.ru/b/biznes-processyh/texnicheskajapod/kurs-podgotovki-specialista-texnicheskojj-podderzh/oznakomlenie-s-texnicheskojj-chastju-servisa/----
 # Notes:
 # - "includes all XXYY" means match prefix.
 # - For pools where no direct host was stated, we return default_host.
@@ -35,12 +37,22 @@ RULES_EXACT: dict[int, PoolRule] = {
 # We interpret "55XX" as any pool where first two digits are 55, etc.
 RULES_PREFIX: list[tuple[str, PoolRule]] = [
     ("99", PoolRule(default_host="https://api.p03.green-api.com")),  # 99XX
-    ("33", PoolRule(default_host="https://api.green-api.com")),     # 33XX
-    ("55", PoolRule(default_host="https://api.green-api.com")),     # 55XX
+    ("33", PoolRule(default_host="https://api.green-api.com")),  # 33XX
+    ("55", PoolRule(default_host="https://api.green-api.com")),  # 55XX
     ("57", PoolRule(default_host="https://api.green-api.com", direct_host="https://5700.api.green-api.com")),  # 57XX
-    ("77", PoolRule(default_host="https://api.greenapi.com", direct_host="https://7700.api.greenapi.com")),    # 77XX
-    ("31", PoolRule(default_host="https://api.green-api.com", direct_host="https://3100.api.green-api.com", path_prefix="/v3")),  # 31XX
-    ("35", PoolRule(default_host="https://api.green-api.com", direct_host="https://3500.api.green-api.com", path_prefix="/v3")),  # 35XX
+    ("77", PoolRule(default_host="https://api.greenapi.com", direct_host="https://7700.api.greenapi.com")),  # 77XX
+    (
+        "31",
+        PoolRule(
+            default_host="https://api.green-api.com", direct_host="https://3100.api.green-api.com", path_prefix="/v3"
+        ),
+    ),  # 31XX
+    (
+        "35",
+        PoolRule(
+            default_host="https://api.green-api.com", direct_host="https://3500.api.green-api.com", path_prefix="/v3"
+        ),
+    ),  # 35XX
 ]
 
 
