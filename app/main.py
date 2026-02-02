@@ -2,6 +2,7 @@ import time
 import json
 import traceback
 import os
+import sys
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.resources import resource_path
 from app.update import get_update_manager, get_current_version
@@ -1138,7 +1139,41 @@ class App(QtWidgets.QWidget):
     def _on_update_available(self, update_info: dict):
         """Handle when a new update is available."""
         # Show update notification in a non-blocking way
-        QtCore.QTimer.singleShot(100, lambda: self.update_manager.show_update_dialog(update_info, self))
+        QtCore.QTimer.singleShot(100, lambda: self._show_simple_update_dialog(update_info))
+
+    def _show_simple_update_dialog(self, update_info: dict):
+        """Show a simple update dialog."""
+        version = update_info.get("version", "Unknown")
+        notes = update_info.get("notes", "New version available")
+        download_url = update_info.get("download_url", "")
+
+        msg_box = QtWidgets.QMessageBox(self)
+        msg_box.setWindowTitle("Update Available")
+        msg_box.setIcon(QtWidgets.QMessageBox.Information)
+        msg_box.setText(f"A new version ({version}) is available!")
+        msg_box.setInformativeText(f"Current version: {get_current_version()}\n\n{notes}")
+
+        # Check if self-update is available
+        can_self_update = getattr(sys, "frozen", False)
+
+        if can_self_update:
+            msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
+            msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
+            msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
+        else:
+            msg_box.addButton("Download Manually", QtWidgets.QMessageBox.AcceptRole)
+            msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
+
+        result = msg_box.exec()
+
+        if can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url:
+            # Update Now
+            self.update_manager.perform_simple_update(download_url, self)
+        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url) or (
+            can_self_update and result == QtWidgets.QMessageBox.ActionRole and download_url
+        ):
+            # Download Manually
+            QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
 
     @QtCore.Slot(str)
     def _on_update_error(self, error_msg: str):
