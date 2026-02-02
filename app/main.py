@@ -377,9 +377,9 @@ class App(QtWidgets.QWidget):
             self.instance_input.setFocus()
             return None
 
-        # Validate format: at least 4 digits, starts with digits
-        if len(instance_id) < 4 or not instance_id[:4].isdigit():
-            self.output.setPlainText("Invalid Instance ID format. Must be at least 4 digits starting with numbers.")
+        # Validate format: at least 4 digits, contains only numbers
+        if len(instance_id) < 4 or not instance_id.isdigit():
+            self.output.setPlainText("Invalid Instance ID format. Must be at least 4 digits and contain only numbers.")
             self.instance_input.setFocus()
             return None
         return instance_id

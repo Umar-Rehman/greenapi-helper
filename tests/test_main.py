@@ -35,9 +35,9 @@ class TestApp:
         assert result is None
         assert "Invalid Instance ID format" in app.output.toPlainText()
 
-    def test_get_instance_id_or_warn_starts_with_letters(self, app):
-        """Test instance ID that doesn't start with digits."""
-        app.instance_input.setText("abcd1234")
+    def test_get_instance_id_or_warn_contains_letters(self, app):
+        """Test instance ID that contains non-numeric characters."""
+        app.instance_input.setText("1234abcd")
         result = app._get_instance_id_or_warn()
         assert result is None
         assert "Invalid Instance ID format" in app.output.toPlainText()
