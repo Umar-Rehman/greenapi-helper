@@ -51,8 +51,8 @@ class UpdateManager(QtCore.QObject):
             # Create request with authentication if token is provided
             req = urllib.request.Request(self.version_url)
             if self.github_token:
-                req.add_header('Authorization', f'token {self.github_token}')
-                req.add_header('Accept', 'application/vnd.github.v3+json')
+                req.add_header("Authorization", f"token {self.github_token}")
+                req.add_header("Accept", "application/vnd.github.v3+json")
 
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode("utf-8"))
@@ -71,7 +71,7 @@ class UpdateManager(QtCore.QObject):
                     "changelog_url": data.get("html_url", ""),
                     "minimum_version": "1.0.0",  # You can set this in release body or tags
                     "release_date": data.get("published_at", ""),
-                    "notes": data.get("body", "New version available")
+                    "notes": data.get("body", "New version available"),
                 }
                 self.update_available.emit(update_info)
             # If versions are the same or local is newer, do nothing

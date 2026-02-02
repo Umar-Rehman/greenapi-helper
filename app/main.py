@@ -2,7 +2,6 @@ import time
 import json
 import traceback
 import os
-import sys
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.resources import resource_path
 from app.update import get_update_manager, get_current_version
