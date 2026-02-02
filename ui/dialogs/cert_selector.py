@@ -39,7 +39,9 @@ class CertificateSelectorDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Info label
-        info_label = QLabel("Select a client certificate from your Windows certificate store:")
+        info_label = QLabel(
+            "Select a client certificate from your Windows certificate store:"
+        )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
@@ -92,17 +94,23 @@ class CertificateSelectorDialog(QDialog):
                             from cryptography import x509
                             from cryptography.hazmat.backends import default_backend
 
-                            cert = x509.load_der_x509_certificate(cert_der, default_backend())
+                            cert = x509.load_der_x509_certificate(
+                                cert_der, default_backend()
+                            )
 
                             # Get subject information
                             try:
-                                cn_attrs = cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)
+                                cn_attrs = cert.subject.get_attributes_for_oid(
+                                    x509.oid.NameOID.COMMON_NAME
+                                )
                                 if cn_attrs:
                                     cn = cn_attrs[0].value
                                 else:
                                     cn = cert.subject.rfc4514_string()
                             except (ValueError, TypeError) as e:
-                                self._log_error(f"Failed to parse certificate name: {str(e)}")
+                                self._log_error(
+                                    f"Failed to parse certificate name: {str(e)}"
+                                )
                                 cn = "Unknown Certificate"
 
                             subject = cert.subject.rfc4514_string()
@@ -148,7 +156,9 @@ class CertificateSelectorDialog(QDialog):
                 for cert_info in all_certs_found:
                     self._certificates.append(cert_info)
                     status = "⚠ No Private Key"
-                    display_text = f"{cert_info['cn']} - {status} [{cert_info['store']}]"
+                    display_text = (
+                        f"{cert_info['cn']} - {status} [{cert_info['store']}]"
+                    )
                     item = QListWidgetItem(display_text)
                     item.setData(Qt.UserRole, len(self._certificates) - 1)
                     self.cert_list.addItem(item)
@@ -177,10 +187,14 @@ class CertificateSelectorDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(
-                self, "Error Loading Certificates", f"Failed to load certificates from Windows store:\n{str(e)}"
+                self,
+                "Error Loading Certificates",
+                f"Failed to load certificates from Windows store:\n{str(e)}",
             )
 
-    def _on_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem):
+    def _on_selection_changed(
+        self, current: QListWidgetItem, previous: QListWidgetItem
+    ):
         """Handle certificate selection change."""
         if not current:
             self.details_label.setText("Select a certificate to view details.")
@@ -281,5 +295,9 @@ class CertificateSelectorDialog(QDialog):
             import traceback
 
             traceback.print_exc()
-            QMessageBox.critical(self, "Error Exporting Certificate", f"Failed to export certificate:\n{str(e)}")
+            QMessageBox.critical(
+                self,
+                "Error Exporting Certificate",
+                f"Failed to export certificate:\n{str(e)}",
+            )
             return None

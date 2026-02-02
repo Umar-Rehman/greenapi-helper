@@ -89,7 +89,9 @@ class InstanceSettingsDialog(QDialog):
         r = 0
 
         self.webhookUrl = QLineEdit(current.get("webhookUrl", ""))
-        self.webhookUrl.setPlaceholderText("https://xyz.com/webhook/green-api/  (empty to disable)")
+        self.webhookUrl.setPlaceholderText(
+            "https://xyz.com/webhook/green-api/  (empty to disable)"
+        )
         self.webhookUrl.setFixedWidth(320)
         grid.addWidget(label_cell("Webhook Url"), r, 0)
         grid.addWidget(control_cell(self.webhookUrl), r, 1)
@@ -98,7 +100,9 @@ class InstanceSettingsDialog(QDialog):
         r += 1
 
         self.webhookUrlToken = QLineEdit(current.get("webhookUrlToken", ""))
-        self.webhookUrlToken.setPlaceholderText("(optional) token header value, or empty")
+        self.webhookUrlToken.setPlaceholderText(
+            "(optional) token header value, or empty"
+        )
         self.webhookUrlToken.setFixedWidth(320)
         grid.addWidget(label_cell("Webhook authorization header"), r, 0)
         grid.addWidget(control_cell(self.webhookUrlToken), r, 1)
@@ -109,7 +113,9 @@ class InstanceSettingsDialog(QDialog):
         self.delaySendMessagesMilliseconds = QSpinBox()
         self.delaySendMessagesMilliseconds.setRange(500, 600000)
         self.delaySendMessagesMilliseconds.setSingleStep(100)
-        self.delaySendMessagesMilliseconds.setValue(int(current.get("delaySendMessagesMilliseconds", 5000)))
+        self.delaySendMessagesMilliseconds.setValue(
+            int(current.get("delaySendMessagesMilliseconds", 5000))
+        )
         self.delaySendMessagesMilliseconds.setFixedWidth(140)
         grid.addWidget(label_cell("Queue send delay (ms)"), r, 0)
         grid.addWidget(control_cell(self.delaySendMessagesMilliseconds), r, 1)
@@ -128,7 +134,9 @@ class InstanceSettingsDialog(QDialog):
             sep(r)
             r += 1
 
-        self._checks["markIncomingMessagesReadedOnReply"].toggled.connect(self._sync_rule)
+        self._checks["markIncomingMessagesReadedOnReply"].toggled.connect(
+            self._sync_rule
+        )
         self._sync_rule()
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -147,7 +155,9 @@ class InstanceSettingsDialog(QDialog):
         data = {
             "webhookUrl": self.webhookUrl.text().strip(),
             "webhookUrlToken": self.webhookUrlToken.text().strip(),
-            "delaySendMessagesMilliseconds": int(self.delaySendMessagesMilliseconds.value()),
+            "delaySendMessagesMilliseconds": int(
+                self.delaySendMessagesMilliseconds.value()
+            ),
         }
         for k in self._checks:
             data[k] = "yes" if self._checks[k].isChecked() else "no"

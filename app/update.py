@@ -14,13 +14,13 @@ def get_current_version() -> str:
     """Get the current application version from version.json."""
     try:
         # Try to read from version.json in the same directory as this module
-        version_file = os.path.join(os.path.dirname(__file__), '..', 'version.json')
-        with open(version_file, 'r', encoding='utf-8') as f:
+        version_file = os.path.join(os.path.dirname(__file__), "..", "version.json")
+        with open(version_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data.get('version', '0.0.0')
+            return data.get("version", "0.0.0")
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         # Fallback version if file can't be read
-        return '0.0.0'
+        return "0.0.0"
 
 
 class UpdateManager(QtCore.QObject):
@@ -37,15 +37,17 @@ class UpdateManager(QtCore.QObject):
     def check_for_updates(self) -> None:
         """Check for updates in a background thread."""
         # Run the check in a separate thread to avoid blocking UI
-        QtCore.QThreadPool.globalInstance().start(QtCore.QRunnable.create(self._perform_update_check))
+        QtCore.QThreadPool.globalInstance().start(
+            QtCore.QRunnable.create(self._perform_update_check)
+        )
 
     def _perform_update_check(self) -> None:
         """Perform the actual update check."""
         try:
             with urllib.request.urlopen(self.version_url, timeout=10) as response:
-                data = json.loads(response.read().decode('utf-8'))
+                data = json.loads(response.read().decode("utf-8"))
 
-            remote_version = data.get('version', '0.0.0')
+            remote_version = data.get("version", "0.0.0")
             if self._is_newer_version(remote_version, get_current_version()):
                 self.update_available.emit(data)
             # If versions are the same or local is newer, do nothing
@@ -58,8 +60,8 @@ class UpdateManager(QtCore.QObject):
     def _is_newer_version(self, remote: str, local: str) -> bool:
         """Compare version strings to determine if remote is newer than local."""
         try:
-            remote_parts = [int(x) for x in remote.split('.')]
-            local_parts = [int(x) for x in local.split('.')]
+            remote_parts = [int(x) for x in remote.split(".")]
+            local_parts = [int(x) for x in local.split(".")]
 
             # Pad shorter version with zeros
             max_len = max(len(remote_parts), len(local_parts))
@@ -71,22 +73,30 @@ class UpdateManager(QtCore.QObject):
             # If version parsing fails, assume no update available
             return False
 
-    def show_update_dialog(self, update_info: Dict[str, Any], parent: QtWidgets.QWidget) -> None:
+    def show_update_dialog(
+        self, update_info: Dict[str, Any], parent: QtWidgets.QWidget
+    ) -> None:
         """Show a dialog informing the user about available updates."""
-        version = update_info.get('version', 'Unknown')
-        notes = update_info.get('notes', 'No release notes available')
-        download_url = update_info.get('download_url', '')
-        changelog_url = update_info.get('changelog_url', '')
+        version = update_info.get("version", "Unknown")
+        notes = update_info.get("notes", "No release notes available")
+        download_url = update_info.get("download_url", "")
+        changelog_url = update_info.get("changelog_url", "")
 
         msg_box = QtWidgets.QMessageBox(parent)
         msg_box.setWindowTitle("Update Available")
         msg_box.setIcon(QtWidgets.QMessageBox.Information)
         msg_box.setText(f"A new version ({version}) is available!")
-        msg_box.setInformativeText(f"Current version: {get_current_version()}\n\n{notes}")
+        msg_box.setInformativeText(
+            f"Current version: {get_current_version()}\n\n{notes}"
+        )
 
         # Add buttons
-        download_button = msg_box.addButton("Download", QtWidgets.QMessageBox.AcceptRole)
-        changelog_button = msg_box.addButton("View Changelog", QtWidgets.QMessageBox.HelpRole)
+        download_button = msg_box.addButton(
+            "Download", QtWidgets.QMessageBox.AcceptRole
+        )
+        changelog_button = msg_box.addButton(
+            "View Changelog", QtWidgets.QMessageBox.HelpRole
+        )
         msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
 
         msg_box.exec()
@@ -102,6 +112,6 @@ class UpdateManager(QtCore.QObject):
 
 def get_update_manager() -> UpdateManager:
     """Get or create the global update manager instance."""
-    if not hasattr(get_update_manager, '_instance'):
+    if not hasattr(get_update_manager, "_instance"):
         get_update_manager._instance = UpdateManager()
     return get_update_manager._instance

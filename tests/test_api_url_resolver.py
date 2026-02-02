@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import patch
 from greenapi import api_url_resolver
 
 

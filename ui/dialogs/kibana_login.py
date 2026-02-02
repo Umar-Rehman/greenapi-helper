@@ -73,7 +73,9 @@ class KibanaLoginDialog(QDialog):
         password = self.password_input.text().strip()
 
         if not username or not password:
-            QMessageBox.warning(self, "Missing Credentials", "Please enter both username and password.")
+            QMessageBox.warning(
+                self, "Missing Credentials", "Please enter both username and password."
+            )
             return
 
         self._username = username

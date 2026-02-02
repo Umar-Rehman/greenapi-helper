@@ -1,5 +1,3 @@
-import pytest
-import json
 from unittest.mock import patch, MagicMock
 from greenapi import client
 
@@ -12,7 +10,7 @@ class TestClient:
         url = client._build_url("https://api.example.com", "12345", "test")
         assert url == "https://api.example.com/waInstance12345/test"
 
-    @patch('greenapi.client.requests.request')
+    @patch("greenapi.client.requests.request")
     def test_send_request_success(self, mock_request):
         """Test successful request sending."""
         mock_response = MagicMock()
@@ -23,7 +21,7 @@ class TestClient:
         result = client.send_request("GET", "https://example.com")
         assert result == '{"success": true}'
 
-    @patch('greenapi.client.requests.request')
+    @patch("greenapi.client.requests.request")
     def test_send_request_error(self, mock_request):
         """Test request error handling."""
         mock_response = MagicMock()
@@ -36,21 +34,23 @@ class TestClient:
 
     def test_make_api_call(self):
         """Test API call construction."""
-        with patch('greenapi.client.send_request') as mock_send:
+        with patch("greenapi.client.send_request") as mock_send:
             mock_send.return_value = '{"result": "ok"}'
             result = client.make_api_call(
                 "https://api.example.com",
                 "12345",
                 "token123",
                 "getStateInstance",
-                "GET"
+                "GET",
             )
             mock_send.assert_called_once()
             assert result == '{"result": "ok"}'
 
     def test_get_instance_state(self):
         """Test get instance state function."""
-        with patch('greenapi.client.make_api_call') as mock_call:
+        with patch("greenapi.client.make_api_call") as mock_call:
             mock_call.return_value = '{"stateInstance": "authorized"}'
-            result = client.get_instance_state("https://api.example.com", "12345", "token123")
+            result = client.get_instance_state(
+                "https://api.example.com", "12345", "token123"
+            )
             assert result == '{"stateInstance": "authorized"}'

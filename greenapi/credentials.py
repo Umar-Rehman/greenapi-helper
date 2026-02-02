@@ -134,7 +134,17 @@ class CredentialManager:
             # Try certutil export by thumbprint (current user store)
             try:
                 result = subprocess.run(
-                    ["certutil.exe", "-user", "-exportPFX", "-p", pfx_password, "-f", "MY", thumbprint, str(pfx_file)],
+                    [
+                        "certutil.exe",
+                        "-user",
+                        "-exportPFX",
+                        "-p",
+                        pfx_password,
+                        "-f",
+                        "MY",
+                        thumbprint,
+                        str(pfx_file),
+                    ],
                     capture_output=True,
                     text=True,
                     timeout=10,
@@ -144,7 +154,17 @@ class CredentialManager:
                 if result.returncode != 0:
                     # Fallback: try CN (less reliable)
                     result = subprocess.run(
-                        ["certutil.exe", "-user", "-exportPFX", "-p", pfx_password, "-f", "MY", cn, str(pfx_file)],
+                        [
+                            "certutil.exe",
+                            "-user",
+                            "-exportPFX",
+                            "-p",
+                            pfx_password,
+                            "-f",
+                            "MY",
+                            cn,
+                            str(pfx_file),
+                        ],
                         capture_output=True,
                         text=True,
                         timeout=10,
@@ -156,8 +176,10 @@ class CredentialManager:
                     from cryptography.hazmat.primitives.serialization import pkcs12
 
                     pfx_data = pfx_file.read_bytes()
-                    private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
-                        pfx_data, pfx_password.encode(), backend=default_backend()
+                    private_key, certificate, additional_certs = (
+                        pkcs12.load_key_and_certificates(
+                            pfx_data, pfx_password.encode(), backend=default_backend()
+                        )
                     )
 
                     if private_key:

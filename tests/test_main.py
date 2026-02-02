@@ -1,7 +1,7 @@
 import pytest
 import os
 from unittest.mock import patch, MagicMock
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtCore
 from app.main import App
 
 
@@ -101,11 +101,11 @@ class TestApp:
     def test_loading_states_ui_elements(self, app):
         """Test that loading state UI elements are properly initialized."""
         # Check that status label exists and has correct initial state
-        assert hasattr(app, 'status_label')
+        assert hasattr(app, "status_label")
         assert app.status_label.text() == "Ready"
 
         # Check that progress bar exists and is initially hidden
-        assert hasattr(app, 'progress_bar')
+        assert hasattr(app, "progress_bar")
 
     def test_show_hide_progress(self, app):
         """Test progress bar show/hide functionality."""
@@ -122,19 +122,23 @@ class TestApp:
         assert app.status_label.text() == "Ready"
         assert "color: #666" in app.status_label.styleSheet()
 
-    @patch('app.main.QtWidgets.QProgressDialog')
-    @patch('app.main.get_kibana_session_cookie_with_password')
-    def test_authenticate_kibana_progress_dialog_creation(self, mock_get_cookie, mock_progress_dialog, app):
+    @patch("app.main.QtWidgets.QProgressDialog")
+    @patch("app.main.get_kibana_session_cookie_with_password")
+    def test_authenticate_kibana_progress_dialog_creation(
+        self, mock_get_cookie, mock_progress_dialog, app
+    ):
         """Test that the authentication progress dialog is created with correct settings."""
         # Mock the progress dialog
         mock_dialog = MagicMock()
         mock_progress_dialog.return_value = mock_dialog
-        
+
         # Mock the authentication function to return a cookie
         mock_get_cookie.return_value = "test_cookie"
 
         # Set environment variables to trigger the progress dialog path
-        with patch.dict(os.environ, {'KIBANA_USER': 'testuser', 'KIBANA_PASS': 'testpass'}):
+        with patch.dict(
+            os.environ, {"KIBANA_USER": "testuser", "KIBANA_PASS": "testpass"}
+        ):
             # Call the method that creates the progress dialog
             result = app._authenticate_kibana()
 
@@ -151,6 +155,8 @@ class TestApp:
         mock_dialog.setWindowTitle.assert_called_once_with("Kibana Authentication")
         mock_dialog.setCancelButton.assert_called_once_with(None)
         mock_dialog.setMinimumDuration.assert_called_once_with(0)
-        mock_dialog.setLabelText.assert_called_once_with("Authenticating with Kibana using certificate...")
+        mock_dialog.setLabelText.assert_called_once_with(
+            "Authenticating with Kibana using certificate..."
+        )
         mock_dialog.show.assert_called_once()
         mock_dialog.close.assert_called_once()

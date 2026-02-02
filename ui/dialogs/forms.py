@@ -132,7 +132,9 @@ class FormDialog(QDialog):
 # Convenience functions
 
 
-def ask_chat_history(parent: QWidget, *, chat_id_default: str = "", count_default: int = 10):
+def ask_chat_history(
+    parent: QWidget, *, chat_id_default: str = "", count_default: int = 10
+):
     dlg = FormDialog(
         "Get Chat History",
         fields=[
