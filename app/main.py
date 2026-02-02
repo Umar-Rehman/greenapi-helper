@@ -5,6 +5,7 @@ import os
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.version import __version__
 from app.resources import resource_path
+from app.update import get_update_manager
 from ui.dialogs import forms, instance_settings, qr
 from ui.dialogs.cert_selector import CertificateSelectorDialog
 from ui.dialogs.kibana_login import KibanaLoginDialog
@@ -48,7 +49,15 @@ class App(QtWidgets.QWidget):
         self._ctx_ttl_seconds = 10 * 60
         self._last_chat_id = None
 
+        # Initialize update manager
+        self.update_manager = get_update_manager()
+        self.update_manager.update_available.connect(self._on_update_available)
+        self.update_manager.update_error.connect(self._on_update_error)
+
         self._setup_ui()
+
+        # Check for updates after UI is set up
+        QtCore.QTimer.singleShot(1000, self.update_manager.check_for_updates)  # Check after 1 second
 
     def _add_button(self, layout, text, handler, action_type=None):
         """Add a QPushButton to the given layout with specified text and handler.
@@ -676,7 +685,7 @@ class App(QtWidgets.QWidget):
             if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
                 return False
             if cred_mgr.has_kibana_cookie():
-                self.output.setPlainText("✓ Certificate and Kibana session configured successfully!")
+                self.output.setPlainText("Certificate and Kibana session configured!")
 
         # Update client.py to use the configured certificates
         if cert_files := cred_mgr.get_certificate_files():
@@ -1033,6 +1042,18 @@ class App(QtWidgets.QWidget):
             )
 
         self._run_async(f"Fetching Status Statistic for {id_message}...", work)
+
+    @QtCore.Slot(dict)
+    def _on_update_available(self, update_info: dict):
+        """Handle when a new update is available."""
+        # Show update notification in a non-blocking way
+        QtCore.QTimer.singleShot(100, lambda: self.update_manager.show_update_dialog(update_info, self))
+
+    @QtCore.Slot(str)
+    def _on_update_error(self, error_msg: str):
+        """Handle update check errors (silently ignore for now)."""
+        # Could log to console or show subtle notification if needed
+        print(f"Update check failed: {error_msg}")
 
 
 if __name__ == "__main__":
