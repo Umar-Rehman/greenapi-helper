@@ -1,15 +1,14 @@
 # Green API Helper
 
-A desktop application for managing Green API WhatsApp instances with certificate-based authentication and Kibana integration.
+A desktop application for managing Green API instances with certificate-based authentication and Kibana integration.
 
 ## Features
 
-- **WhatsApp Instance Management**: Create, configure, and manage Green API instances
+- **Instance Management**: Configure and manage Green API instances
 - **Certificate Authentication**: Secure authentication using Windows certificate store
 - **Kibana Integration**: Direct access to ELK stack logs and monitoring
-- **QR Code Generation**: Easy instance setup with QR codes
-- **Message Handling**: Send and receive WhatsApp messages
-- **Webhook Management**: Configure and manage incoming webhooks
+- **QR Code Generation**: Easy instance configuration with QR codes, and settings
+- **Message Handling**: Send, receive, and view specific messages and message history, as well as queued messages and webhooks.
 
 ## Installation
 
@@ -58,11 +57,7 @@ python -m app.main
 3. **Instance Management**
    - Enter your Green API instance ID
    - Configure webhooks and settings
-   - Send/receive messages
-
-4. **Kibana Integration**
-   - Access logs and monitoring data
-   - View instance statistics and performance
+   - Send/receive/view messages
 
 ## Development
 
@@ -133,7 +128,7 @@ This project uses GitHub Actions for automated quality assurance:
 Create a `.env.local` file in the project root:
 
 ```env
-# Kibana Configuration
+# Kibana Configuration (required for authentication)
 KIBANA_URL=https://your-kibana-instance.com
 KIBANA_USER=your-username
 
@@ -185,7 +180,7 @@ python -m app.main --debug
 
 ## License
 
-[Add your license information here]
+[I potentially need to add some license information here]
 
 ## Support
 
