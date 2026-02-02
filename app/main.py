@@ -364,10 +364,12 @@ class App(QtWidgets.QWidget):
 
         # For any other errors, try to extract useful information
         # Remove Python traceback if present
-        lines = error.split('\n')
+        lines = error.split("\n")
         for i, line in enumerate(lines):
-            if 'HTTP' in line or 'Error:' in line or any(
-                keyword in line.lower() for keyword in ['certificate', 'timeout', 'connection']
+            if (
+                "HTTP" in line
+                or "Error:" in line
+                or any(keyword in line.lower() for keyword in ["certificate", "timeout", "connection"])
             ):
                 return f"API Error: {line.strip()}"
 
