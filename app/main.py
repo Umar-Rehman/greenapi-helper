@@ -366,7 +366,7 @@ class App(QtWidgets.QWidget):
         return str(value)
 
     def _get_instance_id_or_warn(self) -> str | None:
-        """Get the instance ID from the input field, or show a warning if empty.
+        """Get the instance ID from the input field, or show a warning if empty/invalid.
 
         Returns:
             The instance ID string if valid, None otherwise.
@@ -374,6 +374,12 @@ class App(QtWidgets.QWidget):
         instance_id = self.instance_input.text().strip()
         if not instance_id:
             self.output.setPlainText("Please enter an Instance ID.")
+            self.instance_input.setFocus()
+            return None
+
+        # Validate format: at least 4 digits, starts with digits
+        if len(instance_id) < 4 or not instance_id[:4].isdigit():
+            self.output.setPlainText("Invalid Instance ID format. Must be at least 4 digits starting with numbers.")
             self.instance_input.setFocus()
             return None
         return instance_id
