@@ -117,9 +117,7 @@ def make_api_call(
 
         url += "?" + urlencode(query_params)
     # Green API uses token authentication, not client certificates
-    return send_request(
-        method, url, json_body=json_body, cert_files=cert_files, use_cert=False
-    )
+    return send_request(method, url, json_body=json_body, cert_files=cert_files, use_cert=False)
 
 
 # Account API functions
@@ -134,13 +132,9 @@ def get_instance_settings(api_url: str, instance_id: str, api_token: str) -> str
     return make_api_call(api_url, instance_id, api_token, "getSettings", "GET")
 
 
-def set_instance_settings(
-    api_url: str, instance_id: str, api_token: str, settings: dict
-) -> str:
+def set_instance_settings(api_url: str, instance_id: str, api_token: str, settings: dict) -> str:
     """Update the settings for a WhatsApp instance."""
-    return make_api_call(
-        api_url, instance_id, api_token, "setSettings", "POST", json_body=settings
-    )
+    return make_api_call(api_url, instance_id, api_token, "setSettings", "POST", json_body=settings)
 
 
 def logout_instance(api_url: str, instance_id: str, api_token: str) -> str:
@@ -162,9 +156,7 @@ def get_wa_settings(api_url: str, instance_id: str, api_token: str) -> str:
 # Journal API functions
 
 
-def get_incoming_msgs_journal(
-    api_url: str, instance_id: str, api_token: str, minutes: int = 1440
-) -> str:
+def get_incoming_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
         api_url,
         instance_id,
@@ -175,9 +167,7 @@ def get_incoming_msgs_journal(
     )
 
 
-def get_outgoing_msgs_journal(
-    api_url: str, instance_id: str, api_token: str, minutes: int = 1440
-) -> str:
+def get_outgoing_msgs_journal(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
         api_url,
         instance_id,
@@ -188,9 +178,7 @@ def get_outgoing_msgs_journal(
     )
 
 
-def get_chat_history(
-    api_url: str, instance_id: str, api_token: str, chat_id: str, count: int = 10
-) -> str:
+def get_chat_history(api_url: str, instance_id: str, api_token: str, chat_id: str, count: int = 10) -> str:
     """Retrieve chat history for a specific chat."""
     return make_api_call(
         api_url,
@@ -202,9 +190,7 @@ def get_chat_history(
     )
 
 
-def get_message(
-    api_url: str, instance_id: str, api_token: str, chat_id: str, id_message: str
-) -> str:
+def get_message(api_url: str, instance_id: str, api_token: str, chat_id: str, id_message: str) -> str:
     return make_api_call(
         api_url,
         instance_id,
@@ -235,17 +221,13 @@ def get_webhook_count(api_url: str, instance_id: str, api_token: str) -> str:
 
 
 def clear_webhooks_queue(api_url: str, instance_id: str, api_token: str) -> str:
-    return make_api_call(
-        api_url, instance_id, api_token, "clearWebhooksQueue", "DELETE"
-    )
+    return make_api_call(api_url, instance_id, api_token, "clearWebhooksQueue", "DELETE")
 
 
 # Status API functions
 
 
-def get_outgoing_statuses(
-    api_url: str, instance_id: str, api_token: str, minutes: int = 1440
-) -> str:
+def get_outgoing_statuses(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
         api_url,
         instance_id,
@@ -256,9 +238,7 @@ def get_outgoing_statuses(
     )
 
 
-def get_incoming_statuses(
-    api_url: str, instance_id: str, api_token: str, minutes: int = 1440
-) -> str:
+def get_incoming_statuses(api_url: str, instance_id: str, api_token: str, minutes: int = 1440) -> str:
     return make_api_call(
         api_url,
         instance_id,
@@ -269,9 +249,7 @@ def get_incoming_statuses(
     )
 
 
-def get_status_statistic(
-    api_url: str, instance_id: str, api_token: str, id_message: str
-) -> str:
+def get_status_statistic(api_url: str, instance_id: str, api_token: str, id_message: str) -> str:
     return make_api_call(
         api_url,
         instance_id,

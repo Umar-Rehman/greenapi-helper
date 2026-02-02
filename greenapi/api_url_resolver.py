@@ -90,9 +90,7 @@ def pool_from_instance_id(id_instance: str) -> int:
     """
     s = str(id_instance).strip()
     if len(s) < 4 or not s[:4].isdigit():
-        raise ValueError(
-            f"Invalid idInstance '{id_instance}'. Expected at least 4 leading digits."
-        )
+        raise ValueError(f"Invalid idInstance '{id_instance}'. Expected at least 4 leading digits.")
     return int(s[:4])
 
 
@@ -123,9 +121,7 @@ def resolve_api_url(id_instance: str, prefer_direct: bool = True) -> str:
         rule = PoolRule(default_host="https://api.greenapi.com")
 
     # Choose host
-    host = (
-        rule.direct_host if (prefer_direct and rule.direct_host) else rule.default_host
-    )
+    host = rule.direct_host if (prefer_direct and rule.direct_host) else rule.default_host
 
     # Apply /v3 if needed
     if rule.path_prefix and not host.endswith(rule.path_prefix):

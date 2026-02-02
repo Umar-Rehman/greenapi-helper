@@ -18,7 +18,7 @@ def get_current_version() -> str:
         with open(version_file, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("version", "0.0.0")
-    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+    except FileNotFoundError, json.JSONDecodeError, KeyError:
         # Fallback version if file can't be read
         return "0.0.0"
 
@@ -37,9 +37,7 @@ class UpdateManager(QtCore.QObject):
     def check_for_updates(self) -> None:
         """Check for updates in a background thread."""
         # Run the check in a separate thread to avoid blocking UI
-        QtCore.QThreadPool.globalInstance().start(
-            QtCore.QRunnable.create(self._perform_update_check)
-        )
+        QtCore.QThreadPool.globalInstance().start(QtCore.QRunnable.create(self._perform_update_check))
 
     def _perform_update_check(self) -> None:
         """Perform the actual update check."""
@@ -73,9 +71,7 @@ class UpdateManager(QtCore.QObject):
             # If version parsing fails, assume no update available
             return False
 
-    def show_update_dialog(
-        self, update_info: Dict[str, Any], parent: QtWidgets.QWidget
-    ) -> None:
+    def show_update_dialog(self, update_info: Dict[str, Any], parent: QtWidgets.QWidget) -> None:
         """Show a dialog informing the user about available updates."""
         version = update_info.get("version", "Unknown")
         notes = update_info.get("notes", "No release notes available")
@@ -86,17 +82,11 @@ class UpdateManager(QtCore.QObject):
         msg_box.setWindowTitle("Update Available")
         msg_box.setIcon(QtWidgets.QMessageBox.Information)
         msg_box.setText(f"A new version ({version}) is available!")
-        msg_box.setInformativeText(
-            f"Current version: {get_current_version()}\n\n{notes}"
-        )
+        msg_box.setInformativeText(f"Current version: {get_current_version()}\n\n{notes}")
 
         # Add buttons
-        download_button = msg_box.addButton(
-            "Download", QtWidgets.QMessageBox.AcceptRole
-        )
-        changelog_button = msg_box.addButton(
-            "View Changelog", QtWidgets.QMessageBox.HelpRole
-        )
+        download_button = msg_box.addButton("Download", QtWidgets.QMessageBox.AcceptRole)
+        changelog_button = msg_box.addButton("View Changelog", QtWidgets.QMessageBox.HelpRole)
         msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
 
         msg_box.exec()

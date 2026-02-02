@@ -176,10 +176,8 @@ class CredentialManager:
                     from cryptography.hazmat.primitives.serialization import pkcs12
 
                     pfx_data = pfx_file.read_bytes()
-                    private_key, certificate, additional_certs = (
-                        pkcs12.load_key_and_certificates(
-                            pfx_data, pfx_password.encode(), backend=default_backend()
-                        )
+                    private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
+                        pfx_data, pfx_password.encode(), backend=default_backend()
                     )
 
                     if private_key:

@@ -356,9 +356,7 @@ def get_api_token(
     Returns:
         The API token string, or error message if not found
     """
-    token_re = re.compile(
-        rf"(?:/| )waInstance{re.escape(instance_id)}/[A-Za-z]+/([a-fA-F0-9]{{32,}})"
-    )
+    token_re = re.compile(rf"(?:/| )waInstance{re.escape(instance_id)}/[A-Za-z]+/([a-fA-F0-9]{{32,}})")
 
     proxy_url = f"{KIBANA_URL}/api/console/proxy"
 
