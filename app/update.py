@@ -374,7 +374,7 @@ del "%~f0"
                 dialog.set_progress(100)
                 dialog.set_status("Update Complete - Exiting in 2 seconds...")
                 QtWidgets.QApplication.processEvents()
-                
+
                 # Exit after a short delay to show the message
                 import time
                 time.sleep(2)
