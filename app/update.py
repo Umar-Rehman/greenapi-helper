@@ -113,8 +113,11 @@ class UpdateManager(QtCore.QObject):
     def perform_self_update(self, download_url: str, parent_widget: QtWidgets.QWidget) -> bool:
         """Download and install update automatically with progress feedback."""
         try:
+            print(f"DEBUG: Starting self-update process with URL: {download_url}")  # Debug logging
+
             # Check if running from source - self-update only works with frozen executables
             if not getattr(sys, "frozen", False):
+                print("DEBUG: Not running as frozen executable - showing manual update message")  # Debug logging
                 QtWidgets.QMessageBox.information(
                     parent_widget,
                     "Update Not Available",
@@ -122,6 +125,8 @@ class UpdateManager(QtCore.QObject):
                     "Please download the update manually from the GitHub releases page.",
                 )
                 return False
+
+            print("DEBUG: Running as frozen executable - proceeding with update")  # Debug logging
 
             # Create progress dialog
             progress_dialog = QtWidgets.QProgressDialog("Preparing update...", "Cancel", 0, 100, parent_widget)
@@ -132,30 +137,63 @@ class UpdateManager(QtCore.QObject):
 
             # Download the update
             progress_dialog.setLabelText("Downloading update...")
-            temp_path = self._download_update_with_progress(download_url, progress_dialog)
-            if not temp_path:
+            try:
+                temp_path = self._download_update_with_progress(download_url, progress_dialog)
+                if not temp_path:
+                    print("DEBUG: Download failed or was cancelled")  # Debug logging
+                    progress_dialog.close()
+                    return False
+                print(f"DEBUG: Download completed successfully to: {temp_path}")  # Debug logging
+            except Exception as e:
+                print(f"DEBUG: Download failed with exception: {str(e)}")  # Debug logging
                 progress_dialog.close()
+                QtWidgets.QMessageBox.critical(
+                    parent_widget,
+                    "Download Failed",
+                    f"Failed to download the update:\n\n{str(e)}\n\nPlease try downloading manually from the GitHub releases page."
+                )
                 return False
 
             # Create and run updater script
             progress_dialog.setLabelText("Preparing installation...")
             progress_dialog.setValue(90)
-            updater_script = self._create_updater_script(temp_path)
-            if not updater_script:
+            try:
+                updater_script = self._create_updater_script(temp_path)
+                if not updater_script:
+                    print("DEBUG: Failed to create updater script")  # Debug logging
+                    progress_dialog.close()
+                    return False
+                print(f"DEBUG: Updater script created: {updater_script}")  # Debug logging
+            except Exception as e:
+                print(f"DEBUG: Failed to create updater script with exception: {str(e)}")  # Debug logging
                 progress_dialog.close()
+                QtWidgets.QMessageBox.critical(
+                    parent_widget,
+                    "Update Preparation Failed",
+                    f"Failed to prepare the update installation:\n\n{str(e)}\n\nPlease try downloading manually from the GitHub releases page."
+                )
                 return False
 
             # Show completion message
-            progress_dialog.setLabelText("Update ready! Application will restart...")
+            progress_dialog.setLabelText("Update ready! Application will restart automatically...")
             progress_dialog.setValue(100)
             progress_dialog.setCancelButtonText("Close")
 
             # Wait a moment to show completion
-            QtCore.QTimer.singleShot(1500, progress_dialog.close)
+            QtCore.QTimer.singleShot(2000, progress_dialog.close)
+
+            # Show a final confirmation message
+            QtCore.QTimer.singleShot(2500, lambda: QtWidgets.QMessageBox.information(
+                parent_widget,
+                "Update Started",
+                "The update has been downloaded and the updater is starting.\n\n"
+                "The application will close and restart automatically.\n\n"
+                "If the application doesn't restart, please run it manually."
+            ))
 
             # Launch updater and exit current app
-            QtCore.QTimer.singleShot(2000, lambda: subprocess.Popen([updater_script], shell=True))
-            QtCore.QTimer.singleShot(2500, QtWidgets.QApplication.quit)  # Give time for updater to start
+            QtCore.QTimer.singleShot(3000, lambda: subprocess.Popen([updater_script], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE))
+            QtCore.QTimer.singleShot(3500, QtWidgets.QApplication.quit)  # Give time for updater to start
             return True
 
         except Exception as e:
@@ -237,20 +275,91 @@ class UpdateManager(QtCore.QObject):
             print(f"DEBUG: Updater script path: {updater_script}")  # Debug logging
 
             script_content = f"""@echo off
-echo Updating Green API Helper...
+echo ========================================
+echo Green API Helper - Update Installer
+echo ========================================
+echo.
+echo Current executable: {current_exe}
+echo New executable temp: {new_exe_path}
+echo.
 echo Please wait while the update is installed...
-timeout /t 2 /nobreak > nul
+timeout /t 3 /nobreak > nul
 
 REM Wait for main application to fully exit
-timeout /t 1 /nobreak > nul
+echo Waiting for application to exit completely...
+timeout /t 3 /nobreak > nul
 
-REM Replace the old executable with the new one
-move /Y "{new_exe_path}" "{current_exe}"
+REM Check if the new file exists
+if not exist "{new_exe_path}" (
+    echo ERROR: New executable not found at {new_exe_path}
+    echo.
+    echo Press any key to exit...
+    pause > nul
+    exit /b 1
+)
 
-REM Launch the updated application
+REM Create backup of current executable
+set "backup_exe={current_exe}.backup"
+echo Creating backup of current executable...
+if exist "{current_exe}" (
+    copy "{current_exe}" "{backup_exe}" > nul
+    if errorlevel 1 (
+        echo WARNING: Could not create backup
+    ) else (
+        echo Backup created: {backup_exe}
+    )
+)
+
+REM Attempt to replace the executable
+echo Replacing executable...
+move /Y "{new_exe_path}" "{current_exe}" > nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Failed to replace executable (file may be locked)
+    echo.
+    echo Trying alternative method...
+    
+    REM Alternative: Copy to a temp name and then rename
+    set "temp_exe={current_exe}.new"
+    copy "{new_exe_path}" "{temp_exe}" > nul
+    if errorlevel 1 (
+        echo ERROR: Alternative method also failed
+        echo.
+        echo Please manually replace the executable:
+        echo Copy from: {new_exe_path}
+        echo Copy to: {current_exe}
+        echo.
+        echo Press any key to exit...
+        pause > nul
+        exit /b 1
+    )
+    
+    REM Try to rename
+    move /Y "{temp_exe}" "{current_exe}" > nul 2>&1
+    if errorlevel 1 (
+        echo ERROR: Could not rename file
+        echo Manual replacement required
+        echo.
+        echo Press any key to exit...
+        pause > nul
+        exit /b 1
+    )
+)
+
+echo.
+echo Update successful! Launching updated application...
+echo.
 start "" "{current_exe}"
 
+REM Clean up backup after a delay
+timeout /t 5 /nobreak > nul
+if exist "{backup_exe}" (
+    echo Cleaning up backup file...
+    del "{backup_exe}"
+)
+
 REM Clean up this script
+echo Update complete!
+timeout /t 2 /nobreak > nul
 del "%~f0"
 """
 
@@ -280,6 +389,7 @@ del "%~f0"
 
         # Check if self-update is available
         can_self_update = getattr(sys, "frozen", False)
+        print(f"DEBUG: Can self-update: {can_self_update} (frozen: {getattr(sys, 'frozen', False)})")  # Debug logging
 
         if can_self_update:
             # Add buttons for frozen executable
