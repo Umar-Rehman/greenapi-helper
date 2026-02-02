@@ -348,7 +348,9 @@ echo Executable replaced successfully!
 echo Launching updated application...
 timeout /t 1 /nobreak > nul
 
-start "" "{current_exe}"
+set "APPDIR=%~dp0"
+cd /d "%APPDIR%"
+start "" /d "%APPDIR%" "%APPDIR%greenapi-helper.exe"
 
 echo.
 echo Update complete. You can close this window.
