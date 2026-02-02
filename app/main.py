@@ -575,7 +575,7 @@ class App(QtWidgets.QWidget):
                 )
                 if cookie:
                     cred_mgr.set_kibana_cookie(cookie)
-                    self.output.setPlainText("✓ Certificate and Kibana session configured!")
+                    self.output.setPlainText("Certificate and Kibana session configured!")
                     return True
                 else:
                     self.output.setPlainText(
@@ -597,11 +597,14 @@ class App(QtWidgets.QWidget):
             prefill_username = username  # Remember username for retry
 
             # Show progress dialog for manual authentication
-            progress = QtWidgets.QProgressDialog(f"Authenticating as {username}...", None, 0, 0, self)
-            progress.setWindowModality(QtCore.Qt.WindowModal)
+            progress = QtWidgets.QMessageBox(self)
             progress.setWindowTitle("Authentication")
-            progress.setCancelButton(None)  # No cancel button
-            progress.setMinimumDuration(0)  # Show immediately
+            progress.setText(
+                f"Authenticating as {username} with Kibana...\n\n"
+                "Please wait while we establish a secure connection using your certificate."
+            )
+            progress.setStandardButtons(QtWidgets.QMessageBox.NoButton)  # No buttons
+            progress.setWindowModality(QtCore.Qt.WindowModal)
             progress.show()
 
             try:
@@ -609,7 +612,7 @@ class App(QtWidgets.QWidget):
 
                 if cookie:
                     cred_mgr.set_kibana_cookie(cookie)
-                    self.output.setPlainText("✓ Certificate and Kibana session configured!")
+                    self.output.setPlainText("Certificate and Kibana session configured!")
                     return True
                 else:
                     # Authentication failed - ask if user wants to retry
@@ -631,7 +634,7 @@ class App(QtWidgets.QWidget):
                         return True  # Allow user to continue without Kibana session
                     # Loop continues to retry
             finally:
-                progress.close()
+                progress.accept()
 
     def _ensure_authentication(self) -> bool:
         """
