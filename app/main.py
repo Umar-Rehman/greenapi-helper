@@ -125,7 +125,7 @@ class App(QtWidgets.QWidget):
     def _create_reauthenticate_button(self, root):
         reauth_btn = QtWidgets.QPushButton("🔑 Re-authenticate Kibana Session")
         reauth_btn.clicked.connect(self._reauthenticate_kibana)
-        reauth_btn.setToolTip("Clear current session and re-authenticate with Kibana")
+        reauth_btn.setToolTip("Clear all credentials and allow certificate re-selection")
         root.addWidget(reauth_btn)
 
     def _create_tabs(self, root):
@@ -390,11 +390,11 @@ class App(QtWidgets.QWidget):
         return bool(tok and tok != "apiToken not found" and not tok.startswith("HTTP ") and self._ctx.get("api_url"))
 
     def _reauthenticate_kibana(self):
-        """Force re-authentication with Kibana by clearing the current session."""
+        """Force re-authentication with Kibana by clearing all credentials and starting fresh."""
         cred_mgr = get_credential_manager()
-        cred_mgr.set_kibana_cookie(None)
-        self.output.setPlainText("Clearing current session...")
-        if not self._authenticate_kibana():
+        cred_mgr.clear()  # Clear all certificates and cookies
+        self.output.setPlainText("Clearing all credentials...")
+        if not self._ensure_authentication():
             self.output.setPlainText("Re-authentication cancelled.")
 
     def _authenticate_kibana(self) -> bool:
@@ -403,11 +403,15 @@ class App(QtWidgets.QWidget):
         Tries environment credentials first, then prompts user with retry on failure.
 
         Returns:
-            True if authentication succeeded or user cancelled, False should never happen
+            True if authentication succeeded, False if authentication failed or was cancelled
         """
         cred_mgr = get_credential_manager()
         env_username = os.getenv("KIBANA_USER")
         env_password = os.getenv("KIBANA_PASS")
+
+        # Show initial status
+        self.output.setPlainText("Starting Kibana authentication...")
+        QtWidgets.QApplication.processEvents()
 
         # Try environment credentials first
         if env_username and env_password:
@@ -438,12 +442,14 @@ class App(QtWidgets.QWidget):
         # Prompt for credentials with retry loop
         prefill_username = env_username or ""
         while True:
+            # Show status before login dialog appears
+            self.output.setPlainText("Opening login dialog...")
+            QtWidgets.QApplication.processEvents()  # Allow UI to update
+
             login_dialog = KibanaLoginDialog(self, prefill_username=prefill_username)
             if login_dialog.exec() != QtWidgets.QDialog.Accepted:
-                self.output.setPlainText(
-                    "⚠ Kibana authentication cancelled.\n" "API calls may fail. You can try again later."
-                )
-                return True  # Allow user to continue without Kibana session
+                self.output.setPlainText("Kibana authentication cancelled.")
+                return False  # Authentication failed, don't proceed with API calls
 
             username, password = login_dialog.get_credentials()
             prefill_username = username  # Remember username for retry
