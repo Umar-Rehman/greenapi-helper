@@ -64,11 +64,16 @@ class UpdateProgressDialog(QtWidgets.QDialog):
         self.progress.setRange(0, 100)
         layout.addWidget(self.progress)
 
+        # Button area
+        button_layout = QtWidgets.QHBoxLayout()
+
         # Close button (initially hidden)
         self.close_button = QtWidgets.QPushButton("Close")
         self.close_button.clicked.connect(self.accept)
         self.close_button.hide()
-        layout.addWidget(self.close_button)
+        button_layout.addWidget(self.close_button)
+
+        layout.addLayout(button_layout)
 
         logger.info(f"Update log file: {log_file}")
         self.log(f"Update log file: {log_file}")
@@ -95,10 +100,11 @@ class UpdateProgressDialog(QtWidgets.QDialog):
         self.log(f"ERROR: {error}")
         self.close_button.show()
 
-    def finish_success(self):
-        """Mark update as successful."""
-        self.set_status("Update Complete - Application will restart")
+    def finish_success_with_restart(self):
+        """Mark update as successful - auto-restart will happen via batch script."""
+        self.set_status("Update Complete - Exiting to apply update...")
         self.set_progress(100)
+        logger.info("Update successful - app will restart automatically")
 
 
 class UpdateManager(QtCore.QObject):
@@ -217,9 +223,8 @@ class UpdateManager(QtCore.QObject):
 
             success = self._prepare_and_restart(temp_path, progress_dialog)
             if success:
-                progress_dialog.finish_success()
-                progress_dialog.log("Application will restart in 2 seconds...")
-                QtCore.QTimer.singleShot(2000, QtWidgets.QApplication.quit)
+                progress_dialog.finish_success_with_restart()
+                progress_dialog.log("Waiting for user to click 'Restart Now'...")
             else:
                 progress_dialog.show_error("Failed to prepare update")
 
@@ -312,10 +317,7 @@ setlocal enabledelayedexpansion
 
 echo Updating Green API Helper...
 echo Waiting for main application to close completely...
-timeout /t 5 /nobreak > nul
-
-echo Waiting for file locks to be released...
-timeout /t 2 /nobreak > nul
+timeout /t 15 /nobreak > nul
 
 REM Retry loop for file replacement (handles file locks)
 set retries=5
@@ -324,13 +326,10 @@ set retry_count=0
 :retry_replace
 if !retry_count! geq !retries! (
     echo ERROR: Failed to replace executable after !retries! attempts
-    echo Backup file is at: {updated_exe}
-    echo Original file is at: {current_exe}
     pause
     exit /b 1
 )
 
-echo Attempt !retry_count! of !retries!: Replacing executable...
 if exist "{updated_exe}" (
     move /Y "{updated_exe}" "{current_exe}" >nul 2>&1
     if errorlevel 1 (
@@ -346,13 +345,13 @@ if exist "{updated_exe}" (
 )
 
 echo Executable replaced successfully!
-echo Starting updated application...
+echo Launching updated application...
 timeout /t 1 /nobreak > nul
 
-cd /d "%~dp0"
 start "" "{current_exe}"
 
-echo Update complete!
+echo.
+echo Update complete. You can close this window.
 timeout /t 3 /nobreak > nul
 del "%~f0"
 """
@@ -363,17 +362,25 @@ del "%~f0"
             dialog.log(f"Update script created: {batch_script}")
             dialog.set_progress(90)
 
-            # Start the batch script in background
-            logger.info("Starting update script...")
-            dialog.log("Starting update script...")
-            subprocess.Popen(
-                [batch_script],
-                shell=True,
-                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
-            )
+            # Start batch script immediately - don't wait for user
+            try:
+                subprocess.Popen(
+                    batch_script,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
+                    shell=True,
+                )
+                logger.info("Batch script started - exiting to allow replacement")
+                dialog.log("Update script started - exiting application...")
+                dialog.set_progress(100)
+                dialog.set_status("Update Complete - Exiting...")
+                # Exit after a short delay to show the message
+                QtCore.QTimer.singleShot(2000, lambda: sys._exit(0))
+            except Exception as e:
+                logger.error(f"Failed to start batch script: {e}")
+                dialog.log(f"ERROR starting script: {e}")
+                return False
 
             logger.info("Update prepared successfully")
-            dialog.set_progress(100)
             return True
 
         except Exception as e:
