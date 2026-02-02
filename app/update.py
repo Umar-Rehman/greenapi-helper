@@ -305,26 +305,55 @@ class UpdateManager(QtCore.QObject):
             dialog.log("Copy successful")
             dialog.set_progress(80)
 
-            # Create batch script
+            # Create batch script with better error handling
             batch_script = current_exe + ".updater.bat"
             batch_content = f"""@echo off
-echo Updating Green API Helper...
-echo Waiting for main application to close...
-timeout /t 3 /nobreak > nul
+setlocal enabledelayedexpansion
 
-echo Replacing executable...
-move /Y "{updated_exe}" "{current_exe}"
-if errorlevel 1 (
-    echo ERROR: Failed to replace executable
+echo Updating Green API Helper...
+echo Waiting for main application to close completely...
+timeout /t 5 /nobreak > nul
+
+echo Waiting for file locks to be released...
+timeout /t 2 /nobreak > nul
+
+REM Retry loop for file replacement (handles file locks)
+set retries=5
+set retry_count=0
+
+:retry_replace
+if !retry_count! geq !retries! (
+    echo ERROR: Failed to replace executable after !retries! attempts
+    echo Backup file is at: {updated_exe}
+    echo Original file is at: {current_exe}
     pause
     exit /b 1
 )
 
+echo Attempt !retry_count! of !retries!: Replacing executable...
+if exist "{updated_exe}" (
+    move /Y "{updated_exe}" "{current_exe}" >nul 2>&1
+    if errorlevel 1 (
+        set /A retry_count=!retry_count! + 1
+        echo Retry !retry_count!...
+        timeout /t 2 /nobreak > nul
+        goto retry_replace
+    )
+) else (
+    echo ERROR: Updated file not found at {updated_exe}
+    pause
+    exit /b 1
+)
+
+echo Executable replaced successfully!
 echo Starting updated application...
+timeout /t 1 /nobreak > nul
+
+cd /d "%~dp0"
 start "" "{current_exe}"
 
-echo Cleaning up...
-timeout /t 2 /nobreak > nul
+echo Update complete!
+timeout /t 3 /nobreak > nul
 del "%~f0"
 """
 
