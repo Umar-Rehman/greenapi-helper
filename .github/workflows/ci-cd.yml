@@ -74,7 +74,7 @@ jobs:
 
     - name: Create executable with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --name greenapi-helper --icon=app/resources/icon.ico app/main.py
+        pyinstaller --onefile --windowed --name greenapi-helper app/main.py
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
