@@ -16,24 +16,23 @@ KIBANA_AUTH_PATHS = ["/internal/security/me", "/api/security/v1/me", "/api/statu
 
 # Helper functions
 
-def get_kibana_session_cookie(
-    cert_files: Optional[Tuple[str, str]] = None
-) -> Optional[str]:
+
+def get_kibana_session_cookie(cert_files: Optional[Tuple[str, str]] = None) -> Optional[str]:
     """
     Automatically authenticate to Kibana using certificate and retrieve session cookie.
-    
+
     Tries multiple approaches:
     1. Certificate-only mode (Windows handles key in background)
     2. With extracted private key
     3. Returns None if all methods fail (fallback to manual entry)
-    
+
     Args:
         cert_files: Tuple of (cert_path, key_path) for client certificates
-    
+
     Returns:
         Session cookie string if successful, None otherwise
     """
-    
+
     # Strategy 1: Try WinHTTP with cert from store (no key export)
     if platform.system() == "Windows":
         cookie = _try_kibana_auth_winhttp(cert_files)
@@ -50,12 +49,12 @@ def get_kibana_session_cookie(
     cookie = _try_kibana_auth_cert_only(cert_files)
     if cookie:
         return cookie
-    
+
     # Strategy 4: Try with full private key export
     cookie = _try_kibana_auth_with_key(cert_files)
     if cookie:
         return cookie
-    
+
     # Strategy 3: Failed - return None for fallback to manual entry
     return None
 
@@ -75,28 +74,29 @@ def _try_kibana_auth_cert_only(cert_files: Optional[Tuple[str, str]]) -> Optiona
     """Try to authenticate using just the certificate (Windows handles key)."""
     try:
         cert = cert_files or ("client.crt", "client.key")
-        
+
         # Use only the cert file, not the key - let Windows SSL handle it
         cert_only = cert[0] if isinstance(cert, tuple) else cert
-        
+
         for path in KIBANA_AUTH_PATHS:
             resp = requests.get(
                 f"{KIBANA_URL}{path}",
                 cert=cert_only,  # Just the cert, no key
                 verify=True,
                 timeout=10,
-                allow_redirects=True
+                allow_redirects=True,
             )
-            
+
             if resp.status_code in (200, 302, 401, 403):
                 cookie = _extract_session_cookie(resp)
                 if cookie:
                     return cookie
-        
+
         return None
-            
+
     except Exception:
         return None
+
 
 def _try_kibana_auth_powershell(cert_files: Optional[Tuple[str, str]]) -> Optional[str]:
     """Try to authenticate using PowerShell and a cert from Windows store (no key export)."""
@@ -123,10 +123,7 @@ foreach ($p in $paths) {{
 """
 
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", script],
-            capture_output=True,
-            text=True,
-            timeout=20
+            ["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=20
         )
 
         if result.returncode != 0:
@@ -143,9 +140,9 @@ foreach ($p in $paths) {{
 
 
 def _try_kibana_auth_powershell_login(
-        username: str,
-        password: str,
-        cert_files: Optional[Tuple[str, str]],
+    username: str,
+    password: str,
+    cert_files: Optional[Tuple[str, str]],
 ) -> Optional[str]:
     """Use PowerShell to log into Kibana with username/password and cert-store auth."""
     try:
@@ -262,33 +259,29 @@ def _try_kibana_auth_with_key(cert_files: Optional[Tuple[str, str]]) -> Optional
     """Try to authenticate with extracted private key using Windows CryptoAPI."""
     try:
         from greenapi.credentials import get_credential_manager
-        
+
         cert_mgr = get_credential_manager()
-        
+
         # Try to extract the private key properly
         if not _extract_private_key_windows():
             return None
-        
+
         # Refresh cert files after extraction attempt
         cert = cert_files
         if not cert or (isinstance(cert, tuple) and len(cert) > 1 and not cert[1]):
             cert = cert_mgr.get_certificate_files() or ("client.crt", "client.key")
         if isinstance(cert, tuple) and len(cert) > 1 and not cert[1]:
             return None
-        
+
         resp = requests.get(
-            f"{KIBANA_URL}/api/status",
-            cert=cert,  # Both cert and key
-            verify=True,
-            timeout=10,
-            allow_redirects=True
+            f"{KIBANA_URL}/api/status", cert=cert, verify=True, timeout=10, allow_redirects=True  # Both cert and key
         )
-        
+
         if resp.status_code == 200:
             return _extract_session_cookie(resp)
         else:
             return None
-            
+
     except Exception:
         return None
 
@@ -300,15 +293,15 @@ def _extract_private_key_windows() -> bool:
     """
     try:
         from greenapi.credentials import get_credential_manager
-        
+
         cert_mgr = get_credential_manager()
-        
+
         # First, check if a key was already exported during certificate setup
         if cert_mgr.ensure_private_key_exported():
             return True
-        
+
         return False
-        
+
     except Exception:
         return False
 
@@ -321,40 +314,36 @@ def _extract_session_cookie(response) -> Optional[str]:
             cookie_str = "; ".join([f"{k}={v}" for k, v in response.cookies.items()])
             if cookie_str:
                 return cookie_str
-        
+
         # Try Set-Cookie header
-        if 'Set-Cookie' in response.headers:
+        if "Set-Cookie" in response.headers:
             cookies = response.cookies
             for cookie_name, cookie_value in cookies.items():
                 if cookie_name and cookie_value:
                     return f"{cookie_name}={cookie_value}"
-        
+
         return None
-        
+
     except Exception:
         return None
 
 
 def get_api_token(
-    instance_id: str,
-    kibana_cookie: Optional[str] = None,
-    cert_files: Optional[Tuple[str, str]] = None
+    instance_id: str, kibana_cookie: Optional[str] = None, cert_files: Optional[Tuple[str, str]] = None
 ) -> str:
     """
     Retrieve the API token for the given instance_id by querying the ELK stack.
-    
+
     Args:
         instance_id: The WhatsApp instance ID
         kibana_cookie: Kibana session cookie (if None, tries to load from env)
         cert_files: Tuple of (cert_path, key_path) for client certificates
                    (if None, tries to load from default files)
-    
+
     Returns:
         The API token string, or error message if not found
     """
-    token_re = re.compile(
-        rf"(?:/| )waInstance{re.escape(instance_id)}/[A-Za-z]+/([a-fA-F0-9]{{32,}})"
-    )
+    token_re = re.compile(rf"(?:/| )waInstance{re.escape(instance_id)}/[A-Za-z]+/([a-fA-F0-9]{{32,}})")
 
     proxy_url = f"{KIBANA_URL}/api/console/proxy"
 
@@ -362,7 +351,7 @@ def get_api_token(
     cookie = kibana_cookie or os.getenv("KIBANA_COOKIE")
     if not cookie:
         return "Kibana cookie not provided. Please authenticate."
-    
+
     cert = cert_files or ("client.crt", "client.key")
     if isinstance(cert, tuple) and len(cert) > 1 and not cert[1]:
         cert = cert[0]
@@ -425,7 +414,7 @@ def get_api_token(
                     return m.group(1)
 
         return "apiToken not found"
-    
+
     except requests.exceptions.SSLError as e:
         return f"SSL Certificate Error: {str(e)}\nPlease check your client certificate."
     except requests.exceptions.RequestException as e:
@@ -483,7 +472,8 @@ $uri = '{KIBANA_URL}/api/console/proxy?path=logs-*,filebeat-*/_search&method=GET
 $body = @'
 {json.dumps(body)}
 '@
-$resp = Invoke-WebRequest -Uri $uri -Method POST -Body $body -Headers $headers -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 60
+$resp = Invoke-WebRequest -Uri $uri -Method POST -Body $body -Headers $headers `
+    -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 60
 $resp.Content
 """
 

@@ -82,11 +82,7 @@ class KibanaAuthDialog(QDialog):
         cookie = self.cookie_input.text().strip()
 
         if not cookie:
-            QMessageBox.warning(
-                self,
-                "Missing Cookie",
-                "Please provide a Kibana cookie."
-            )
+            QMessageBox.warning(self, "Missing Cookie", "Please provide a Kibana cookie.")
             self.cookie_input.setFocus()
             return
 
@@ -96,7 +92,7 @@ class KibanaAuthDialog(QDialog):
     def get_credentials(self) -> str:
         """
         Get the entered Kibana cookie.
-        
+
         Returns:
             The Kibana cookie string.
         """

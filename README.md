@@ -53,15 +53,15 @@ python -m app.main
 1. **Launch the Application**
    - Run `greenapi-helper.exe` or `python -m app.main`
 
-2. **Authentication**
+2. **Certificate Authentication**
    - Select your client certificate from the Windows store
-   - The app will automatically authenticate with Kibana for monitoring access
+   - The app will automatically authenticate with Kibana
 
 3. **Instance Management**
    - Enter your Green API instance ID (10-digit number)
    - Use the Account tab to manage instance lifecycle (settings, reboot, logout)
    - Monitor instance state and configuration
-   - Generate QR codes for WhatsApp Business API setup
+   - Generate QR codes for WhatsApp API setup
 
 4. **Examination and Monitoring**
    - **Journals Tab**: Review message history, incoming/outgoing journals, and specific chat interactions

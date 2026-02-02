@@ -20,6 +20,7 @@ from app.widgets import ToggleSwitch
 
 # Helpers
 
+
 def _to_yesno(value) -> str:
     if isinstance(value, str):
         return "yes" if value.strip().lower() == "yes" else "no"
@@ -71,18 +72,18 @@ class InstanceSettingsDialog(QDialog):
 
         def label_cell(text: str):
             w = QWidget()
-            l = QHBoxLayout(w)
+            layout = QHBoxLayout(w)
             lbl = QLabel(text)
             lbl.setMaximumWidth(360)
             lbl.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
-            l.addWidget(lbl)
-            l.addStretch(1)
+            layout.addWidget(lbl)
+            layout.addStretch(1)
             return w
 
         def control_cell(w: QWidget):
             c = QWidget()
-            l = QHBoxLayout(c)
-            l.addWidget(w, 0, Qt.AlignLeft)
+            layout = QHBoxLayout(c)
+            layout.addWidget(w, 0, Qt.AlignLeft)
             return c
 
         r = 0
@@ -92,14 +93,18 @@ class InstanceSettingsDialog(QDialog):
         self.webhookUrl.setFixedWidth(320)
         grid.addWidget(label_cell("Webhook Url"), r, 0)
         grid.addWidget(control_cell(self.webhookUrl), r, 1)
-        r += 1; sep(r); r += 1
+        r += 1
+        sep(r)
+        r += 1
 
         self.webhookUrlToken = QLineEdit(current.get("webhookUrlToken", ""))
         self.webhookUrlToken.setPlaceholderText("(optional) token header value, or empty")
         self.webhookUrlToken.setFixedWidth(320)
         grid.addWidget(label_cell("Webhook authorization header"), r, 0)
         grid.addWidget(control_cell(self.webhookUrlToken), r, 1)
-        r += 1; sep(r); r += 1
+        r += 1
+        sep(r)
+        r += 1
 
         self.delaySendMessagesMilliseconds = QSpinBox()
         self.delaySendMessagesMilliseconds.setRange(500, 600000)
@@ -108,7 +113,9 @@ class InstanceSettingsDialog(QDialog):
         self.delaySendMessagesMilliseconds.setFixedWidth(140)
         grid.addWidget(label_cell("Queue send delay (ms)"), r, 0)
         grid.addWidget(control_cell(self.delaySendMessagesMilliseconds), r, 1)
-        r += 1; sep(r); r += 1
+        r += 1
+        sep(r)
+        r += 1
 
         self._checks = {}
         for key, label in _SETTINGS:
@@ -117,7 +124,9 @@ class InstanceSettingsDialog(QDialog):
             self._checks[key] = sw
             grid.addWidget(label_cell(label), r, 0)
             grid.addWidget(control_cell(sw), r, 1)
-            r += 1; sep(r); r += 1
+            r += 1
+            sep(r)
+            r += 1
 
         self._checks["markIncomingMessagesReadedOnReply"].toggled.connect(self._sync_rule)
         self._sync_rule()
