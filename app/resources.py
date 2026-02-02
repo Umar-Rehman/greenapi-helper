@@ -4,7 +4,7 @@ from pathlib import Path
 
 def resource_path(relative_path: str) -> str:
     # Check if running in PyInstaller bundle
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # Running as bundled executable
         base = Path(sys._MEIPASS)
     else:
