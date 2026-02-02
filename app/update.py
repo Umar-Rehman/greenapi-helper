@@ -19,7 +19,7 @@ def get_current_version() -> str:
         with open(version_file, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("version", "0.0.0")
-    except FileNotFoundError, json.JSONDecodeError, KeyError:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
         return "0.0.0"
 
 
@@ -136,18 +136,48 @@ class UpdateManager(QtCore.QObject):
         try:
             current_exe = sys.executable
 
-            # Simple replacement - just move the file
-            os.replace(new_exe_path, current_exe)
+            # Create a simple batch script to handle the update
+            import shutil
 
-            # Restart the application
-            subprocess.Popen([current_exe])
+            # Copy new exe to a temporary location with a different name
+            updated_exe = current_exe + ".updated"
+            shutil.copy2(new_exe_path, updated_exe)
+
+            # Create a batch script to replace the file after we exit
+            batch_script = current_exe + ".updater.bat"
+            batch_content = f"""@echo off
+echo Updating Green API Helper...
+timeout /t 2 /nobreak > nul
+move /Y "{updated_exe}" "{current_exe}"
+echo Update complete! Starting application...
+start "" "{current_exe}"
+del "%~f0"
+"""
+
+            with open(batch_script, "w") as f:
+                f.write(batch_content)
+
+            # Start the new version
+            subprocess.Popen([updated_exe])
+
+            # Show message and exit
+            QtWidgets.QMessageBox.information(
+                parent_widget,
+                "Update Started",
+                "Update downloaded successfully!\n\n"
+                "The new version is starting now.\n"
+                "Please close this window when the new version appears."
+            )
+
             QtWidgets.QApplication.quit()
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(
                 parent_widget,
-                "Restart Failed",
-                f"Update downloaded but restart failed: {str(e)}\n\nPlease restart the application manually.",
+                "Update Failed",
+                f"Update downloaded but installation failed: {str(e)}\n\n"
+                f"New executable is at: {new_exe_path}\n\n"
+                "Please manually replace the executable and restart the application."
             )
 
 
