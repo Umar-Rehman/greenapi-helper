@@ -150,7 +150,8 @@ class UpdateManager(QtCore.QObject):
                 QtWidgets.QMessageBox.critical(
                     parent_widget,
                     "Download Failed",
-                    f"Failed to download the update:\n\n{str(e)}\n\nPlease try downloading manually from the GitHub releases page."
+                    f"Failed to download the update:\n\n{str(e)}\n\n"
+                    "Please try downloading manually from the GitHub releases page.",
                 )
                 return False
 
@@ -170,7 +171,8 @@ class UpdateManager(QtCore.QObject):
                 QtWidgets.QMessageBox.critical(
                     parent_widget,
                     "Update Preparation Failed",
-                    f"Failed to prepare the update installation:\n\n{str(e)}\n\nPlease try downloading manually from the GitHub releases page."
+                    f"Failed to prepare the update installation:\n\n{str(e)}\n\n"
+                    "Please try downloading manually from the GitHub releases page.",
                 )
                 return False
 
@@ -183,16 +185,22 @@ class UpdateManager(QtCore.QObject):
             QtCore.QTimer.singleShot(2000, progress_dialog.close)
 
             # Show a final confirmation message
-            QtCore.QTimer.singleShot(2500, lambda: QtWidgets.QMessageBox.information(
-                parent_widget,
-                "Update Started",
-                "The update has been downloaded and the updater is starting.\n\n"
-                "The application will close and restart automatically.\n\n"
-                "If the application doesn't restart, please run it manually."
-            ))
+            QtCore.QTimer.singleShot(
+                2500,
+                lambda: QtWidgets.QMessageBox.information(
+                    parent_widget,
+                    "Update Started",
+                    "The update has been downloaded and the updater is starting.\n\n"
+                    "The application will close and restart automatically.\n\n"
+                    "If the application doesn't restart, please run it manually.",
+                ),
+            )
 
             # Launch updater and exit current app
-            QtCore.QTimer.singleShot(3000, lambda: subprocess.Popen([updater_script], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE))
+            QtCore.QTimer.singleShot(
+                3000,
+                lambda: subprocess.Popen([updater_script], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE),
+            )
             QtCore.QTimer.singleShot(3500, QtWidgets.QApplication.quit)  # Give time for updater to start
             return True
 
@@ -274,6 +282,10 @@ class UpdateManager(QtCore.QObject):
             updater_script = os.path.join(tempfile.gettempdir(), "greenapi_updater.bat")
             print(f"DEBUG: Updater script path: {updater_script}")  # Debug logging
 
+            # Define variables for the batch script
+            backup_exe = f"{current_exe}.backup"
+            temp_exe = f"{current_exe}.new"
+
             script_content = f"""@echo off
 echo ========================================
 echo Green API Helper - Update Installer
@@ -299,7 +311,7 @@ if not exist "{new_exe_path}" (
 )
 
 REM Create backup of current executable
-set "backup_exe={current_exe}.backup"
+set "backup_exe={backup_exe}"
 echo Creating backup of current executable...
 if exist "{current_exe}" (
     copy "{current_exe}" "{backup_exe}" > nul
@@ -317,9 +329,9 @@ if errorlevel 1 (
     echo ERROR: Failed to replace executable (file may be locked)
     echo.
     echo Trying alternative method...
-    
+
     REM Alternative: Copy to a temp name and then rename
-    set "temp_exe={current_exe}.new"
+    set "temp_exe={temp_exe}"
     copy "{new_exe_path}" "{temp_exe}" > nul
     if errorlevel 1 (
         echo ERROR: Alternative method also failed
@@ -332,7 +344,7 @@ if errorlevel 1 (
         pause > nul
         exit /b 1
     )
-    
+
     REM Try to rename
     move /Y "{temp_exe}" "{current_exe}" > nul 2>&1
     if errorlevel 1 (
