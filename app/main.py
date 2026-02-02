@@ -302,9 +302,83 @@ class App(QtWidgets.QWidget):
 
         self.output.setPlainText(self._pretty_print(data))
 
+    def _handle_api_error(self, error: str) -> str:
+        """Parse and display user-friendly error messages for API failures.
+
+        Args:
+            error: Raw error string from API call
+
+        Returns:
+            User-friendly error message
+        """
+        error_lower = error.lower()
+
+        # Handle specific error types first (before generic HTTP errors)
+        if "ssl certificate error" in error_lower:
+            return "SSL Certificate Error: Please check your client certificate and try again."
+        elif "certificate" in error_lower and "error" in error_lower:
+            return "Certificate Error: Please verify your certificate is properly configured."
+        elif "request error:" in error_lower:
+            # Handle requests library errors
+            if "timed out" in error_lower or "timeout" in error_lower:
+                return "Request Timeout: The server took too long to respond. Please try again."
+            elif "connection" in error_lower and ("refused" in error_lower or "failed" in error_lower):
+                return "Connection Error: Unable to connect to Green API. Check your internet connection."
+            elif "dns" in error_lower or "name resolution" in error_lower:
+                return "DNS Error: Unable to resolve server address. Check your network settings."
+            else:
+                return f"Network Error: {error.split(':', 1)[1].strip() if ':' in error else error}"
+        elif "timeout" in error_lower:
+            return "Request Timeout: The server took too long to respond. Please try again."
+        elif "connection" in error_lower and ("refused" in error_lower or "failed" in error_lower):
+            return "Connection Error: Unable to connect to Green API. Check your internet connection."
+        elif "dns" in error_lower or "name resolution" in error_lower:
+            return "DNS Error: Unable to resolve server address. Check your network settings."
+
+        # Handle HTTP status codes
+        if "http 400" in error_lower:
+            return "Bad Request (400): Invalid request parameters. Please check your input."
+        elif "http 401" in error_lower:
+            return "Authentication Failed (401): Invalid API token or credentials."
+        elif "http 403" in error_lower:
+            return "Access Denied (403): Insufficient permissions for this operation."
+        elif "http 404" in error_lower:
+            return "Not Found (404): The requested resource doesn't exist."
+        elif "http 429" in error_lower:
+            return "Rate Limited (429): Too many requests. Please wait and try again."
+        elif "http 500" in error_lower:
+            return "Server Error (500): Green API server error. Please try again later."
+        elif "http 502" in error_lower:
+            return "Bad Gateway (502): Server temporarily unavailable. Please try again."
+        elif "http 503" in error_lower:
+            return "Service Unavailable (503): Server is temporarily down. Please try again later."
+        elif "http" in error_lower and any(code in error for code in ["3", "4", "5"]):
+            # Generic HTTP error for any 3xx, 4xx, or 5xx status
+            return f"API Error: {error.split(':', 1)[1].strip() if ':' in error else error}"
+
+        # Handle API-specific errors in response text
+        if "invalid" in error_lower and "token" in error_lower:
+            return "Invalid API Token: Please check your API token and try again."
+        elif "instance" in error_lower and ("not found" in error_lower or "invalid" in error_lower):
+            return "Invalid Instance ID: Please verify your Instance ID is correct."
+
+        # For any other errors, try to extract useful information
+        # Remove Python traceback if present
+        lines = error.split('\n')
+        for i, line in enumerate(lines):
+            if 'HTTP' in line or 'Error:' in line or any(
+                keyword in line.lower() for keyword in ['certificate', 'timeout', 'connection']
+            ):
+                return f"API Error: {line.strip()}"
+
+        # Fallback: show a generic message but include original error for debugging
+        return f"An error occurred. Please try again.\n\nDetails: {error[:200]}..."
+
     @QtCore.Slot(str)
     def _on_worker_error(self, err: str):
-        self.output.setPlainText("Error:\n" + err)
+        """Handle errors from background worker threads."""
+        user_friendly_error = self._handle_api_error(err)
+        self.output.setPlainText(user_friendly_error)
 
     def _run_async(self, status_text: str, fn):
         self._set_status(status_text)

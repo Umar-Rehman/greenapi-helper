@@ -53,3 +53,46 @@ class TestApp:
         app.instance_input.setText("1234")
         result = app._get_instance_id_or_warn()
         assert result == "1234"
+
+    def test_handle_api_error_401(self, app):
+        """Test 401 authentication error handling."""
+        error = "HTTP 401: Invalid token"
+        result = app._handle_api_error(error)
+        assert "Authentication Failed (401)" in result
+
+    def test_handle_api_error_404(self, app):
+        """Test 404 not found error handling."""
+        error = "HTTP 404: Resource not found"
+        result = app._handle_api_error(error)
+        assert "Not Found (404)" in result
+
+    def test_handle_api_error_500(self, app):
+        """Test 500 server error handling."""
+        error = "HTTP 500: Internal server error"
+        result = app._handle_api_error(error)
+        assert "Server Error (500)" in result
+
+    def test_handle_api_error_ssl_certificate(self, app):
+        """Test SSL certificate error handling."""
+        error = "SSL Certificate Error: certificate verify failed"
+        result = app._handle_api_error(error)
+        assert "SSL Certificate Error" in result
+
+    def test_handle_api_error_timeout(self, app):
+        """Test timeout error handling."""
+        error = "Request Error: HTTPSConnectionPool(host='api.green-api.com', port=443): Read timed out."
+        result = app._handle_api_error(error)
+        assert "Request Timeout" in result
+
+    def test_handle_api_error_connection(self, app):
+        """Test connection error handling."""
+        error = "Request Error: Connection refused"
+        result = app._handle_api_error(error)
+        assert "Connection Error" in result
+
+    def test_handle_api_error_unknown(self, app):
+        """Test unknown error handling."""
+        error = "Some unknown error occurred"
+        result = app._handle_api_error(error)
+        assert "An error occurred" in result
+        assert "Details:" in result
