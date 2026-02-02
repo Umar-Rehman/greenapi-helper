@@ -3,11 +3,24 @@ Auto-update functionality for the Green API Helper application.
 """
 
 import json
+import os
 import urllib.request
 import urllib.error
 from typing import Dict, Any
 from PySide6 import QtCore, QtWidgets
-from app.version import __version__
+
+
+def get_current_version() -> str:
+    """Get the current application version from version.json."""
+    try:
+        # Try to read from version.json in the same directory as this module
+        version_file = os.path.join(os.path.dirname(__file__), '..', 'version.json')
+        with open(version_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get('version', '0.0.0')
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        # Fallback version if file can't be read
+        return '0.0.0'
 
 
 class UpdateManager(QtCore.QObject):
@@ -33,7 +46,7 @@ class UpdateManager(QtCore.QObject):
                 data = json.loads(response.read().decode('utf-8'))
 
             remote_version = data.get('version', '0.0.0')
-            if self._is_newer_version(remote_version, __version__):
+            if self._is_newer_version(remote_version, get_current_version()):
                 self.update_available.emit(data)
             # If versions are the same or local is newer, do nothing
 
@@ -69,7 +82,7 @@ class UpdateManager(QtCore.QObject):
         msg_box.setWindowTitle("Update Available")
         msg_box.setIcon(QtWidgets.QMessageBox.Information)
         msg_box.setText(f"A new version ({version}) is available!")
-        msg_box.setInformativeText(f"Current version: {__version__}\n\n{notes}")
+        msg_box.setInformativeText(f"Current version: {get_current_version()}\n\n{notes}")
 
         # Add buttons
         download_button = msg_box.addButton("Download", QtWidgets.QMessageBox.AcceptRole)

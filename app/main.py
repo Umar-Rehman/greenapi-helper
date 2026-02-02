@@ -3,9 +3,8 @@ import json
 import traceback
 import os
 from PySide6 import QtGui, QtCore, QtWidgets
-from app.version import __version__
 from app.resources import resource_path
-from app.update import get_update_manager
+from app.update import get_update_manager, get_current_version
 from ui.dialogs import forms, instance_settings, qr
 from ui.dialogs.cert_selector import CertificateSelectorDialog
 from ui.dialogs.kibana_login import KibanaLoginDialog
@@ -44,7 +43,7 @@ class App(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"The Helper ({__version__})")
+        self.setWindowTitle(f"The Helper ({get_current_version()})")
         self._ctx = None  # {"instance_id": str, "api_url": str, "api_token": str, "ts": float}
         self._ctx_ttl_seconds = 10 * 60
         self._last_chat_id = None
