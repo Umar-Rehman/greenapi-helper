@@ -35,9 +35,9 @@ class UpdateManager(QtCore.QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # For private repos, use GitHub API with personal access token
+        # GitHub API for public repository (no token required)
         self.version_url = "https://api.github.com/repos/Umar-Rehman/greenapi-helper/releases/latest"
-        self.github_token = os.environ.get("GITHUB_TOKEN")  # Get from environment variable
+        self.github_token = os.environ.get("GITHUB_TOKEN")  # Optional for private repos
         self.check_interval_hours = 24  # Check once per day
 
     def check_for_updates(self) -> None:
@@ -48,10 +48,13 @@ class UpdateManager(QtCore.QObject):
     def _perform_update_check(self) -> None:
         """Perform the actual update check."""
         try:
-            # Create request with authentication if token is provided
+            # Create request (works with public repos, token optional for private)
             req = urllib.request.Request(self.version_url)
             if self.github_token:
                 req.add_header("Authorization", f"token {self.github_token}")
+                req.add_header("Accept", "application/vnd.github.v3+json")
+            else:
+                # For public repos, we can make unauthenticated requests
                 req.add_header("Accept", "application/vnd.github.v3+json")
 
             with urllib.request.urlopen(req, timeout=10) as response:
@@ -210,29 +213,31 @@ del "%~f0"
         msg_box.setInformativeText(f"Current version: {get_current_version()}\n\n{notes}")
 
         # Add buttons
-        update_now_button = msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
-        download_button = msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
-        changelog_button = msg_box.addButton("View Changelog", QtWidgets.QMessageBox.HelpRole)
+        msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
+        msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
+        msg_box.addButton("View Changelog", QtWidgets.QMessageBox.HelpRole)
         msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
 
-        msg_box.exec()
+        # Execute dialog and get result
+        result = msg_box.exec()
 
-        clicked_button = msg_box.clickedButton()
-
-        if clicked_button == update_now_button and download_url:
-            # Perform automatic self-update
+        # Handle button clicks based on return value
+        if result == QtWidgets.QMessageBox.AcceptRole and download_url:
+            # Update Now button clicked
             success = self.perform_self_update(download_url)
             if success:
                 QtWidgets.QMessageBox.information(
                     parent,
                     "Update Started",
-                    "The application will now update and restart automatically.\n" "This may take a few moments...",
+                    "The application will now update and restart automatically.\nThis may take a few moments...",
                 )
-        elif clicked_button == download_button and download_url:
+        elif result == QtWidgets.QMessageBox.ActionRole and download_url:
+            # Download Manually button clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
-        elif clicked_button == changelog_button and changelog_url:
+        elif result == QtWidgets.QMessageBox.HelpRole and changelog_url:
+            # View Changelog button clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
-        # If "Later" is clicked, just close the dialog
+        # RejectRole (Later) or other cases - just close dialog
 
 
 def get_update_manager() -> UpdateManager:
