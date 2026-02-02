@@ -8,6 +8,7 @@ import sys
 import tempfile
 import subprocess
 import urllib.request
+import traceback
 from typing import Optional
 from PySide6 import QtCore, QtWidgets
 
@@ -81,9 +82,11 @@ class UpdateManager(QtCore.QObject):
 
     def perform_simple_update(self, download_url: str, parent_widget: QtWidgets.QWidget) -> None:
         """Simple update: download, replace, restart."""
+        print("[UPDATE] Starting perform_simple_update")
         try:
             # Check if running as executable
             if not getattr(sys, "frozen", False):
+                print("[UPDATE] Not running as frozen executable")
                 QtWidgets.QMessageBox.information(
                     parent_widget,
                     "Update Not Available",
@@ -91,57 +94,78 @@ class UpdateManager(QtCore.QObject):
                     "Please download manually from GitHub releases.",
                 )
                 return
-                return
+
+            print(f"[UPDATE] Running as frozen executable: {sys.executable}")
+            print(f"[UPDATE] Download URL: {download_url}")
 
             # Show progress dialog
             progress = QtWidgets.QProgressDialog("Downloading update...", None, 0, 0, parent_widget)
             progress.setWindowModality(QtCore.Qt.WindowModal)
             progress.show()
+            QtWidgets.QApplication.processEvents()
 
             # Download to temp file
+            print("[UPDATE] Starting download...")
             temp_path = self._simple_download(download_url, progress)
             if not temp_path:
+                print("[UPDATE] Download failed - temp_path is None")
                 progress.close()
                 QtWidgets.QMessageBox.critical(parent_widget, "Download Failed", "Failed to download update.")
                 return
 
+            print(f"[UPDATE] Download successful to: {temp_path}")
             progress.close()
 
             # Replace and restart
+            print("[UPDATE] Starting replacement and restart...")
             self._replace_and_restart(temp_path, parent_widget)
 
         except Exception as e:
+            print(f"[UPDATE] Exception in perform_simple_update: {type(e).__name__}: {str(e)}")
+            print(traceback.format_exc())
             QtWidgets.QMessageBox.critical(parent_widget, "Update Failed", f"Update failed: {str(e)}")
 
     def _simple_download(self, url: str, progress: QtWidgets.QProgressDialog) -> Optional[str]:
         """Download file to temp location."""
         try:
+            print(f"[DOWNLOAD] Starting download from: {url}")
             with urllib.request.urlopen(url, timeout=30) as response:
                 temp_fd, temp_path = tempfile.mkstemp(suffix=".exe")
                 os.close(temp_fd)
+                print(f"[DOWNLOAD] Created temp file: {temp_path}")
 
                 with open(temp_path, "wb") as f:
+                    downloaded = 0
                     while True:
                         chunk = response.read(8192)
                         if not chunk:
                             break
                         f.write(chunk)
+                        downloaded += len(chunk)
+                    print(f"[DOWNLOAD] Downloaded {downloaded} bytes")
 
                 return temp_path
-        except Exception:
+        except Exception as e:
+            print(f"[DOWNLOAD] Download failed: {type(e).__name__}: {str(e)}")
+            print(traceback.format_exc())
             return None
 
     def _replace_and_restart(self, new_exe_path: str, parent_widget: QtWidgets.QWidget) -> None:
         """Replace current exe with new one and restart."""
+        print(f"[REPLACE] Starting replacement: {new_exe_path}")
         try:
             current_exe = sys.executable
+            print(f"[REPLACE] Current executable: {current_exe}")
+            print(f"[REPLACE] New executable path: {new_exe_path}")
 
             # Create a simple batch script to handle the update
             import shutil
 
             # Copy new exe to a temporary location with a different name
             updated_exe = current_exe + ".updated"
+            print(f"[REPLACE] Copying to: {updated_exe}")
             shutil.copy2(new_exe_path, updated_exe)
+            print("[REPLACE] Copy successful")
 
             # Create a batch script to replace the file after we exit
             batch_script = current_exe + ".updater.bat"
@@ -156,9 +180,12 @@ del "%~f0"
 
             with open(batch_script, "w") as f:
                 f.write(batch_content)
+            print(f"[REPLACE] Batch script created: {batch_script}")
 
             # Start the new version
+            print(f"[REPLACE] Starting new version: {updated_exe}")
             subprocess.Popen([updated_exe])
+            print("[REPLACE] New version started")
 
             # Show message and exit
             QtWidgets.QMessageBox.information(
@@ -169,9 +196,12 @@ del "%~f0"
                 "Please close this window when the new version appears.",
             )
 
+            print("[REPLACE] Exiting application")
             QtWidgets.QApplication.quit()
 
         except Exception as e:
+            print(f"[REPLACE] Exception in _replace_and_restart: {type(e).__name__}: {str(e)}")
+            print(traceback.format_exc())
             QtWidgets.QMessageBox.critical(
                 parent_widget,
                 "Update Failed",
