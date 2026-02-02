@@ -1,102 +1,198 @@
 # Green API Helper
 
-A small Windows desktop tool to quickly call Green API endpoints using an **Instance ID**. Each button runs a single API request (similar to Postman), optimized for daily support and operations workflows.
-
----
+A desktop application for managing Green API WhatsApp instances with certificate-based authentication and Kibana integration.
 
 ## Features
 
-- Automatic API URL resolution based on Instance ID
-- Automatic API token lookup from Kibana logs
-- Windows Certificate Store integration (no file handling needed)
-- Safe in-memory credentials and temp-file cleanup on exit
+- **WhatsApp Instance Management**: Create, configure, and manage Green API instances
+- **Certificate Authentication**: Secure authentication using Windows certificate store
+- **Kibana Integration**: Direct access to ELK stack logs and monitoring
+- **QR Code Generation**: Easy instance setup with QR codes
+- **Message Handling**: Send and receive WhatsApp messages
+- **Webhook Management**: Configure and manage incoming webhooks
 
----
+## Installation
 
-## Requirements
+### Option 1: Pre-built Executable (Recommended)
 
-- Windows 10/11
-- Python 3.10+ (for running from source)
-- Access to Kibana and a valid client certificate with private key
+Download the latest release from the [Releases](https://github.com/yourusername/greenapi-helper/releases) page:
 
----
+1. Download `greenapi-helper.exe`
+2. Run the executable (no installation required)
+3. The app will guide you through certificate selection and authentication
 
-## Quick Start (from source)
-
-### 1) Install dependencies
+### Option 2: From Source
 
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/greenapi-helper.git
+cd greenapi-helper
+
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # On Windows
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### 2) Run the app
-
-```bash
+# Run the application
 python -m app.main
 ```
 
-### 3) First-time authentication flow
+## Requirements
 
-When you click any action button for the first time:
+- **Python**: 3.14+ (for source installation)
+- **Operating System**: Windows 10/11 (required for certificate store access)
+- **Certificates**: Valid client certificates in Windows Certificate Store
+- **Network**: Access to Green API and Kibana endpoints
 
-1. **Certificate Selection Dialog** appears
-   - Choose a client certificate from the Windows Certificate Store
-   - Only certificates with private keys are valid for authentication
+## Usage
 
-2. **Kibana Authentication**
-   - If automatic login is not available, you will be prompted
-   - You can provide either:
-     - Kibana username/password (recommended), or
-     - A Kibana session cookie (manual)
+1. **Launch the Application**
+   - Run `greenapi-helper.exe` or `python -m app.main`
 
-Credentials are remembered for the current app session only.
+2. **Certificate Authentication**
+   - Select your client certificate from the Windows store
+   - The app will automatically authenticate with Kibana
 
----
+3. **Instance Management**
+   - Enter your Green API instance ID
+   - Configure webhooks and settings
+   - Send/receive messages
 
-## Environment configuration (optional)
+4. **Kibana Integration**
+   - Access logs and monitoring data
+   - View instance statistics and performance
 
-Create a .env.local file in the project root to prefill or automate authentication:
+## Development
 
-```
-KIBANA_COOKIE=your_cookie_here
-KIBANA_USER=your_username
-KIBANA_PASS=your_password
-KIBANA_PROVIDER_TYPE=basic
-KIBANA_PROVIDER_NAME=basic
-```
+### Setup Development Environment
 
-Notes:
-- `KIBANA_COOKIE` is only used as a fallback if no session cookie is available.
-- `KIBANA_USER`/`KIBANA_PASS` enable automatic login without cookie copying.
-- Provider settings are optional and default to `basic`.
+```bash
+# Install development dependencies
+pip install -r requirements.txt
+pip install pytest flake8 black pyinstaller
 
----
+# Run tests
+pytest tests/
 
-## Legacy file-based certificate setup (optional)
+# Run linting
+flake8 --max-line-length=120 --extend-ignore=E203,W503 app/ greenapi/ ui/
 
-If you prefer using certificate files, place them in the working directory:
-
-```
-client.crt
-client.key
+# Format code
+black --line-length 120 app/ greenapi/ ui/
 ```
 
-You can extract them from a .pfx file:
+### Project Structure
 
 ```
-openssl pkcs12 -legacy -in name.pfx -clcerts -nokeys -out client.crt
-openssl pkcs12 -legacy -in name.pfx -nocerts -nodes -out client.key
+greenapi-helper/
+├── app/                    # Main application code
+│   ├── main.py            # Entry point and UI
+│   ├── resources.py       # Resource management
+│   └── version.py         # Version information
+├── greenapi/              # API client modules
+│   ├── client.py          # HTTP client and API calls
+│   ├── credentials.py     # Certificate management
+│   ├── elk_auth.py        # Kibana authentication
+│   └── api_url_resolver.py # URL resolution logic
+├── ui/                    # User interface components
+│   └── dialogs/           # Dialog windows
+├── tests/                 # Test suite
+└── .github/workflows/     # CI/CD configuration
 ```
 
-If `openssl` is unavailable, install Git Bash (https://git-scm.com/install/windows) and run the commands there.
+### Building from Source
 
----
+```bash
+# Create executable
+pyinstaller --onefile --windowed --name greenapi-helper app/main.py
 
-## How to use
+# The executable will be in the dist/ folder
+```
 
-1. Enter the **Instance ID**
-2. Click an action (Get State, Settings, Journals, Reboot, etc.)
-3. Review the response in the output area
+## CI/CD
+
+This project uses GitHub Actions for automated quality assurance:
+
+- **Automated Testing**: pytest runs on every push and pull request
+- **Code Quality**: flake8 linting ensures consistent code style
+- **Automated Builds**: PyInstaller creates Windows executables
+- **Releases**: Automatic versioned releases with downloadable binaries
+
+### Workflow Triggers
+
+- **Push to main/master**: Full pipeline (test → lint → build → release)
+- **Pull Requests**: Test and lint validation
+- **Manual**: Can be triggered manually for testing
+
+## Configuration
+
+### Environment Variables
+
+Create a `.env.local` file in the project root:
+
+```env
+# Kibana Configuration
+KIBANA_URL=https://your-kibana-instance.com
+KIBANA_USER=your-username
+
+# Optional: Override default API URL
+# GREEN_API_BASE_URL=https://api.green-api.com
+```
+
+### Certificate Requirements
+
+- Certificates must be installed in Windows Certificate Store (Personal/My)
+- Private key must be accessible
+- Certificate should be valid and not expired
+- Supported: PKCS#12 (.pfx/.p12) and individual cert/key files
+
+## Troubleshooting
+
+### Common Issues
+
+**Certificate Not Found**
+- Ensure certificates are in Windows Certificate Store
+- Check certificate validity dates
+- Verify private key accessibility
+
+**Authentication Failed**
+- Check Kibana URL and credentials in `.env.local`
+- Verify network connectivity
+- Check certificate trust settings
+
+**API Connection Issues**
+- Verify instance ID format (10 digits)
+- Check API token validity
+- Ensure Green API service availability
+
+### Debug Mode
+
+Run with debug logging:
+```bash
+python -m app.main --debug
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass and linting is clean
+6. Submit a pull request
+
+## License
+
+[Add your license information here]
+
+## Support
+
+For issues and questions:
+- Create an issue on GitHub
+- Check the troubleshooting section
+- Review the CI/CD logs for build issues
 
 ---
 
