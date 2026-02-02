@@ -1157,22 +1157,21 @@ class App(QtWidgets.QWidget):
         can_self_update = getattr(sys, "frozen", False)
 
         if can_self_update:
-            msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
-            msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
+            update_btn = msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
+            manual_btn = msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
             msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
         else:
-            msg_box.addButton("Download Manually", QtWidgets.QMessageBox.AcceptRole)
+            manual_btn = msg_box.addButton("Download Manually", QtWidgets.QMessageBox.AcceptRole)
             msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
 
-        result = msg_box.exec()
+        msg_box.exec()
+        clicked_btn = msg_box.clickedButton()
 
-        if can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url:
-            # Update Now
+        if can_self_update and clicked_btn == update_btn and download_url:
+            # Update Now clicked
             self.update_manager.perform_simple_update(download_url, self)
-        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url) or (
-            can_self_update and result == QtWidgets.QMessageBox.ActionRole and download_url
-        ):
-            # Download Manually
+        elif clicked_btn == manual_btn and download_url:
+            # Download Manually clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
 
     @QtCore.Slot(str)
