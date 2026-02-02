@@ -77,7 +77,7 @@ jobs:
         pyinstaller --onefile --windowed --name greenapi-helper --icon=app/resources/icon.ico app/main.py
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: greenapi-helper-executable
         path: dist/greenapi-helper.exe
@@ -88,31 +88,18 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
     - name: Download build artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: greenapi-helper-executable
 
     - name: Create Release
-      uses: actions/create-release@v1
-      id: create_release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ github.run_number }}
-        release_name: Release v${{ github.run_number }}
+        name: Release v${{ github.run_number }}
         draft: false
         prerelease: false
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
+        files: greenapi-helper.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./greenapi-helper.exe
-        asset_name: greenapi-helper.exe
-        asset_content_type: application/octet-stream
