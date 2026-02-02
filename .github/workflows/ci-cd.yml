@@ -78,7 +78,7 @@ jobs:
 
     - name: Create executable with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --name greenapi-helper --add-data "ui;ui" app/main.py
+        pyinstaller --onefile --windowed --name greenapi-helper --add-data "ui;ui" --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets app/main.py
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
