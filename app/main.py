@@ -414,7 +414,7 @@ class App(QtWidgets.QWidget):
             # Show progress dialog for authentication
             progress = QtWidgets.QProgressDialog("Authenticating with Kibana...", None, 0, 0, self)
             progress.setWindowModality(QtCore.Qt.WindowModal)
-            progress.setWindowTitle("Authentication")
+            progress.setWindowTitle("Authenticating...")
             progress.setCancelButton(None)  # No cancel button
             progress.setMinimumDuration(0)  # Show immediately
             progress.show()

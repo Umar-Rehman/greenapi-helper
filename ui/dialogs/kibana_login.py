@@ -33,10 +33,7 @@ class KibanaLoginDialog(QDialog):
     def _setup_ui(self, prefill_username: str):
         layout = QVBoxLayout(self)
 
-        info_label = QLabel(
-            "Kibana requires your username/password in addition to the certificate.\n"
-            "Enter your credentials to authenticate automatically (no cookie copy)."
-        )
+        info_label = QLabel("Enter your Kibana credentials to authenticate:")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 

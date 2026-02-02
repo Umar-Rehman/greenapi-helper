@@ -138,6 +138,7 @@ class CredentialManager:
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
 
                 if result.returncode != 0:
@@ -147,6 +148,7 @@ class CredentialManager:
                         capture_output=True,
                         text=True,
                         timeout=10,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
 
                 if result.returncode == 0 and pfx_file.exists():
