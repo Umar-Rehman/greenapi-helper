@@ -119,7 +119,7 @@ class UpdateManager(QtCore.QObject):
                     parent_widget,
                     "Update Not Available",
                     "Self-update is only available when running the installed executable.\n\n"
-                    "Please download the update manually from the GitHub releases page."
+                    "Please download the update manually from the GitHub releases page.",
                 )
                 return False
 
@@ -303,12 +303,14 @@ del "%~f0"
             if success:
                 # Progress dialog will handle the user feedback
                 pass
-        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url) or \
-             (can_self_update and result == QtWidgets.QMessageBox.ActionRole and download_url):
+        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url) or (
+            can_self_update and result == QtWidgets.QMessageBox.ActionRole and download_url
+        ):
             # Download Manually button clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
-        elif (can_self_update and result == QtWidgets.QMessageBox.HelpRole and changelog_url) or \
-             (not can_self_update and result == QtWidgets.QMessageBox.ActionRole and changelog_url):
+        elif (can_self_update and result == QtWidgets.QMessageBox.HelpRole and changelog_url) or (
+            not can_self_update and result == QtWidgets.QMessageBox.ActionRole and changelog_url
+        ):
             # View Changelog button clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
         # RejectRole (Later) or other cases - just close dialog
