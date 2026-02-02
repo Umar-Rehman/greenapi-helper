@@ -21,7 +21,7 @@ def get_current_version() -> str:
         with open(version_file, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("version", "0.0.0")
-    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+    except FileNotFoundError, json.JSONDecodeError, KeyError:
         # Fallback version if file can't be read
         return "0.0.0"
 
