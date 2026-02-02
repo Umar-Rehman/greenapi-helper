@@ -114,6 +114,7 @@ class App(QtWidgets.QWidget):
         self._create_instance_input(root)
         self._create_reauthenticate_button(root)
         self._create_tabs(root)
+        self._create_progress_area(root)
         self._create_output_area(root)
         self.setLayout(root)
 
@@ -200,6 +201,31 @@ class App(QtWidgets.QWidget):
         status_layout.addStretch(1)
         tabs.addTab(status_tab, "Statuses")
 
+    def _create_progress_area(self, root):
+        """Create the progress bar area for showing loading states."""
+        # Status label
+        self.status_label = QtWidgets.QLabel("Ready")
+        self.status_label.setStyleSheet("font-weight: bold; color: #666;")
+        root.addWidget(self.status_label)
+
+        # Progress bar
+        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar.setRange(0, 0)  # Indeterminate progress
+        self.progress_bar.setVisible(False)  # Hidden by default
+        self.progress_bar.setFixedHeight(6)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 3px;
+                background-color: #f0f0f0;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+        root.addWidget(self.progress_bar)
+
     def _create_output_area(self, root):
         self.output = QtWidgets.QTextEdit()
         self.output.setReadOnly(True)
@@ -209,6 +235,13 @@ class App(QtWidgets.QWidget):
 
     @QtCore.Slot(object)
     def _on_worker_result(self, payload):
+        # Update status to show success
+        self.status_label.setText("✅ Operation completed")
+        self.status_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
+
+        # Schedule status reset after a short delay
+        QtCore.QTimer.singleShot(2000, lambda: self._reset_status_label())
+
         if not (isinstance(payload, dict) and "ctx" in payload):
             self.output.setPlainText(self._pretty_print(payload))
             return
@@ -379,11 +412,19 @@ class App(QtWidgets.QWidget):
     @QtCore.Slot(str)
     def _on_worker_error(self, err: str):
         """Handle errors from background worker threads."""
+        # Update status to show error
+        self.status_label.setText("❌ Operation failed")
+        self.status_label.setStyleSheet("font-weight: bold; color: #f44336;")
+
+        # Schedule status reset after a delay
+        QtCore.QTimer.singleShot(3000, lambda: self._reset_status_label())
+
         user_friendly_error = self._handle_api_error(err)
         self.output.setPlainText(user_friendly_error)
 
     def _run_async(self, status_text: str, fn):
         self._set_status(status_text)
+        self._show_progress(status_text)
 
         if not hasattr(self, "_jobs"):
             self._jobs = []
@@ -420,6 +461,10 @@ class App(QtWidgets.QWidget):
                 pass
             worker.deleteLater()
             thread.deleteLater()
+
+            # Hide progress when all jobs are done
+            if not hasattr(self, "_jobs") or len(self._jobs) == 0:
+                self._hide_progress()
 
         # cleanup only when thread is fully stopped
         thread.finished.connect(cleanup, QtCore.Qt.QueuedConnection)
@@ -463,6 +508,24 @@ class App(QtWidgets.QWidget):
     def _set_status(self, msg: str):
         self.output.setPlainText(msg)
 
+    def _show_progress(self, status_text: str):
+        """Show progress bar and update status label."""
+        self.status_label.setText(f"⏳ {status_text}...")
+        self.status_label.setStyleSheet("font-weight: bold; color: #2196F3;")
+        self.progress_bar.setVisible(True)
+
+    def _hide_progress(self):
+        """Hide progress bar and reset status label."""
+        self.status_label.setText("Ready")
+        self.status_label.setStyleSheet("font-weight: bold; color: #666;")
+        self.progress_bar.setVisible(False)
+
+    def _reset_status_label(self):
+        """Reset status label to ready state if no operations are active."""
+        if not hasattr(self, "_jobs") or len(self._jobs) == 0:
+            self.status_label.setText("Ready")
+            self.status_label.setStyleSheet("font-weight: bold; color: #666;")
+
     def _ctx_is_valid(self, instance_id: str) -> bool:
         if not self._ctx or self._ctx.get("instance_id") != instance_id:
             return False
@@ -498,11 +561,12 @@ class App(QtWidgets.QWidget):
         # Try environment credentials first
         if env_username and env_password:
             # Show progress dialog for authentication
-            progress = QtWidgets.QProgressDialog("Authenticating with Kibana...", None, 0, 0, self)
+            progress = QtWidgets.QProgressDialog("Authenticating with Kibana...", "Please wait...", 0, 0, self)
             progress.setWindowModality(QtCore.Qt.WindowModal)
-            progress.setWindowTitle("Authenticating...")
+            progress.setWindowTitle("Kibana Authentication")
             progress.setCancelButton(None)  # No cancel button
             progress.setMinimumDuration(0)  # Show immediately
+            progress.setLabelText("Authenticating with Kibana using certificate...")
             progress.show()
 
             try:
@@ -524,10 +588,6 @@ class App(QtWidgets.QWidget):
         # Prompt for credentials with retry loop
         prefill_username = env_username or ""
         while True:
-            # Show status before login dialog appears
-            self.output.setPlainText("Opening login dialog...")
-            QtWidgets.QApplication.processEvents()  # Allow UI to update
-
             login_dialog = KibanaLoginDialog(self, prefill_username=prefill_username)
             if login_dialog.exec() != QtWidgets.QDialog.Accepted:
                 self.output.setPlainText("Kibana authentication cancelled.")
@@ -594,14 +654,22 @@ class App(QtWidgets.QWidget):
             cert_result = cert_dialog.get_selected_certificate()
             if not cert_result:
                 self.output.setPlainText("Failed to export certificate.")
+                cert_dialog.close()
                 return False
 
             cert_pem, cert_context = cert_result
             if not cred_mgr.set_certificate(cert_pem, cert_context):
                 self.output.setPlainText("Failed to configure certificate.")
+                cert_dialog.close()
                 return False
 
+            # Explicitly close the certificate dialog
+            cert_dialog.close()
+
             # Give feedback about Kibana session status
+            self.output.setPlainText("Authenticating with Kibana...")
+            QtWidgets.QApplication.processEvents()  # Allow UI to update
+
             if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
                 return False
             if cred_mgr.has_kibana_cookie():
