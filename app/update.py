@@ -372,16 +372,19 @@ del "%~f0"
                 logger.info("Batch script started - exiting to allow replacement")
                 dialog.log("Update script started - exiting application...")
                 dialog.set_progress(100)
-                dialog.set_status("Update Complete - Exiting...")
+                dialog.set_status("Update Complete - Exiting in 2 seconds...")
+                QtWidgets.QApplication.processEvents()
+                
                 # Exit after a short delay to show the message
-                QtCore.QTimer.singleShot(2000, lambda: sys._exit(0))
+                import time
+                time.sleep(2)
+                logger.info("Exiting application now")
+                QtWidgets.QApplication.quit()
+                sys.exit(0)
             except Exception as e:
                 logger.error(f"Failed to start batch script: {e}")
                 dialog.log(f"ERROR starting script: {e}")
                 return False
-
-            logger.info("Update prepared successfully")
-            return True
 
         except Exception as e:
             logger.error(f"Prepare failed: {e}")
