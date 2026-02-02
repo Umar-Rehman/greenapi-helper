@@ -96,3 +96,27 @@ class TestApp:
         result = app._handle_api_error(error)
         assert "An error occurred" in result
         assert "Details:" in result
+
+    def test_loading_states_ui_elements(self, app):
+        """Test that loading state UI elements are properly initialized."""
+        # Check that status label exists and has correct initial state
+        assert hasattr(app, 'status_label')
+        assert app.status_label.text() == "Ready"
+
+        # Check that progress bar exists and is initially hidden
+        assert hasattr(app, 'progress_bar')
+
+    def test_show_hide_progress(self, app):
+        """Test progress bar show/hide functionality."""
+        # Initially ready state
+        assert app.status_label.text() == "Ready"
+
+        # Show progress
+        app._show_progress("Testing operation")
+        assert "⏳ Testing operation..." in app.status_label.text()
+        assert "color: #2196F3" in app.status_label.styleSheet()
+
+        # Hide progress
+        app._hide_progress()
+        assert app.status_label.text() == "Ready"
+        assert "color: #666" in app.status_label.styleSheet()
