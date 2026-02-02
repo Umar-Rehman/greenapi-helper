@@ -669,7 +669,7 @@ class App(QtWidgets.QWidget):
             # Give feedback about Kibana session status
             self.output.setPlainText("Authenticating with Kibana...")
             QtWidgets.QApplication.processEvents()  # Allow UI to update
-            
+
             if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
                 return False
             if cred_mgr.has_kibana_cookie():
