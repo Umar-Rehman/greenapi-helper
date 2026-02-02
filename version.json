@@ -1,8 +1,8 @@
 {
-  "version": "1.4.2",
-  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.4.2/greenapi-helper.exe",
+  "version": "1.4.3",
+  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.4.3/greenapi-helper.exe",
   "changelog_url": "https://github.com/Umar-Rehman/greenapi-helper/releases",
   "minimum_version": "1.0.0",
   "release_date": "2026-02-02",
-  "notes": "Test release for auto-update functionality. Applications with auto-update enabled will detect and install this update automatically."
+  "notes": "Enhanced auto-update with progress indicators. Users now see download progress and installation status during updates."
 }
