@@ -1,156 +1,133 @@
-# The Helper – Green API Tool
+# Green API Helper
 
-This is a small desktop tool to quickly call Green API endpoints using an **Instance ID**.
-Each button runs **one API request**, similar to Postman, but faster for daily support tasks without the need for context switching and extra parameter gathering.
-
----
-
-## New: Windows Certificate Store Integration
-
-**No more certificate files needed!** The application now supports:
-- Direct certificate selection from Windows Certificate Store
-- Seamless Kibana authentication on first use
-- Secure credential management in memory
-- Automatic cleanup on exit
+A small Windows desktop tool to quickly call Green API endpoints using an **Instance ID**. Each button runs a single API request (similar to Postman), optimized for daily support and operations workflows.
 
 ---
 
-## What this tool does
+## Features
 
-* You enter an **Instance ID**
-* Click a button (Get State, Settings, Journals, Reboot, etc.)
-* The tool:
-  * automatically finds the API URL
-  * automatically finds the API token from logs
-  * sends the API request
-* The response is shown in the output box
-
-You **do not** need to enter API tokens or URLs manually.
+- Automatic API URL resolution based on Instance ID
+- Automatic API token lookup from Kibana logs
+- Windows Certificate Store integration (no file handling needed)
+- Safe in-memory credentials and temp-file cleanup on exit
 
 ---
 
-## Quick Start
+## Requirements
 
-### 1. Install dependencies
+- Windows 10/11
+- Python 3.10+ (for running from source)
+- Access to Kibana and a valid client certificate with private key
+
+---
+
+## Quick Start (from source)
+
+### 1) Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run the application
+### 2) Run the app
 
 ```bash
 python -m app.main
 ```
 
-### 3. On first use
+### 3) First-time authentication flow
 
-When you click any button for the first time:
+When you click any action button for the first time:
 
-1. **Certificate Selection Dialog** will appear:
-   - Select your client certificate from Windows Certificate Store
-   - Only certificates with private keys are shown
+1. **Certificate Selection Dialog** appears
+   - Choose a client certificate from the Windows Certificate Store
+   - Only certificates with private keys are valid for authentication
 
-2. **Kibana Authentication Dialog** will appear:
-   - Enter your Kibana session cookie
-   - Get it from browser: F12 → Application → Cookies
+2. **Kibana Authentication**
+   - If automatic login is not available, you will be prompted
+   - You can provide either:
+     - Kibana username/password (recommended), or
+     - A Kibana session cookie (manual)
 
-3. **Done!** Credentials are remembered for the session
+Credentials are remembered for the current app session only.
 
 ---
 
-## Legacy Setup (Optional)
+## Environment configuration (optional)
 
-### If you prefer using certificate files:
+Create a .env.local file in the project root to prefill or automate authentication:
 
-Place your **client certificate files** in the same folder as `TheHelper.exe`:
+```
+KIBANA_COOKIE=your_cookie_here
+KIBANA_USER=your_username
+KIBANA_PASS=your_password
+KIBANA_PROVIDER_TYPE=basic
+KIBANA_PROVIDER_NAME=basic
+```
+
+Notes:
+- `KIBANA_COOKIE` is only used as a fallback if no session cookie is available.
+- `KIBANA_USER`/`KIBANA_PASS` enable automatic login without cookie copying.
+- Provider settings are optional and default to `basic`.
+
+---
+
+## Legacy file-based certificate setup (optional)
+
+If you prefer using certificate files, place them in the working directory:
 
 ```
 client.crt
 client.key
 ```
 
-These files are required to access ELK / API endpoints.
-
-You may do this by adding the .pfx file to this directory then running the commands:
+You can extract them from a .pfx file:
 
 ```
 openssl pkcs12 -legacy -in name.pfx -clcerts -nokeys -out client.crt
 openssl pkcs12 -legacy -in name.pfx -nocerts -nodes -out client.key
 ```
 
-If you are having openssl issues, like `openssl : The term 'openssl' is not recognized as the name of a cmdlet, function, script file, or operable program.` then install bash: https://git-scm.com/install/windows and run the above commands in this terminal instead.
-
----
-
-### 3. Run the app
-
-Double-click:
-
-```
-TheHelper.exe
-```
+If `openssl` is unavailable, install Git Bash (https://git-scm.com/install/windows) and run the commands there.
 
 ---
 
 ## How to use
 
 1. Enter the **Instance ID**
-2. Click the action you want:
-
-   * Get Instance State
-   * Get Instance Settings
-   * Get Journals
-   * Reboot Instance (confirmation required)
-3. View the result in the output area
+2. Click an action (Get State, Settings, Journals, Reboot, etc.)
+3. Review the response in the output area
 
 ---
 
-## Reboot action warning
+## Safety notes
 
-The **Reboot Instance** button will:
-
-* show a confirmation popup
-* only reboot if you click **Yes**
-
-This action may interrupt message processing.
+- The **Reboot Instance** and destructive actions prompt for confirmation.
+- Do not share `.env.local`, cookies, or certificate files.
+- Each user should use their own credentials.
 
 ---
 
 ## Troubleshooting
 
-### App starts but buttons do nothing
+### Buttons do nothing
 
-* Check that `.env.local` exists
-* Check that `KIBANA_COOKIE` is filled
+- Ensure your certificate is present in Windows Certificate Store (Current User → Personal)
+- Confirm the certificate has a private key
+- Verify Kibana access and credentials
 
 ### Certificate errors
 
-* Ensure `client.crt` and `client.key` are present
-* Ensure they are valid and not expired
+- Verify the certificate is valid and not expired
+- Re-import with “Mark this key as exportable” if required
 
 ### “apiToken not found”
 
-* The instance may be inactive
-* Try increasing log time range (if available)
-* Check ELK access
-
----
-
-## Security notes
-
-* Do **not** share your `.env.local`
-* Do **not** share your certificate files
-* Each user must use their **own** credentials
+- The instance may be inactive
+- Check Kibana access and time range settings
 
 ---
 
 ## Support / improvements
 
-If you need:
-
-* a new endpoint button
-* a dashboard alternative
-* changes to output formatting
-
-Contact the maintainer of this tool.
+Contact the maintainer for new endpoints, UI changes, or output formatting adjustments.

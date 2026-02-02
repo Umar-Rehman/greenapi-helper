@@ -138,7 +138,7 @@ foreach ($p in $paths) {{
 
         return None
 
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -147,16 +147,16 @@ def _try_kibana_auth_powershell_login(
         password: str,
         cert_files: Optional[Tuple[str, str]],
 ) -> Optional[str]:
-        """Use PowerShell to log into Kibana with username/password and cert-store auth."""
-        try:
-                thumbprint = _get_thumbprint_from_cert_files(cert_files)
-                if not thumbprint:
-                        return None
+    """Use PowerShell to log into Kibana with username/password and cert-store auth."""
+    try:
+        thumbprint = _get_thumbprint_from_cert_files(cert_files)
+        if not thumbprint:
+            return None
 
-                provider_name = os.getenv("KIBANA_PROVIDER_NAME", "basic")
-                provider_type = os.getenv("KIBANA_PROVIDER_TYPE", "basic")
+        provider_name = os.getenv("KIBANA_PROVIDER_NAME", "basic")
+        provider_type = os.getenv("KIBANA_PROVIDER_TYPE", "basic")
 
-                script = f"""
+        script = f"""
 $ErrorActionPreference = 'Stop'
 $thumb = '{thumbprint}'
 $cert = Get-Item -Path ('Cert:\\CurrentUser\\My\\' + $thumb) -ErrorAction Stop
@@ -192,31 +192,31 @@ foreach ($p in @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})) {{
 }}
 """
 
-                env = os.environ.copy()
-                env["KIBANA_USER"] = username
-                env["KIBANA_PASS"] = password
-                env["KIBANA_PROVIDER_TYPE"] = provider_type
-                env["KIBANA_PROVIDER_NAME"] = provider_name
+        env = os.environ.copy()
+        env["KIBANA_USER"] = username
+        env["KIBANA_PASS"] = password
+        env["KIBANA_PROVIDER_TYPE"] = provider_type
+        env["KIBANA_PROVIDER_NAME"] = provider_name
 
-                result = subprocess.run(
-                        ["powershell", "-NoProfile", "-Command", script],
-                        capture_output=True,
-                        text=True,
-                        timeout=20,
-                        env=env,
-                )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env=env,
+        )
 
-                if result.returncode != 0:
-                        return None
+        if result.returncode != 0:
+            return None
 
-                cookie = (result.stdout or "").strip()
-                if cookie:
-                        return cookie
+        cookie = (result.stdout or "").strip()
+        if cookie:
+            return cookie
 
-                return None
+        return None
 
-        except Exception as e:
-                return None
+    except Exception:
+        return None
 
 
 def _try_kibana_auth_winhttp(cert_files: Optional[Tuple[str, str]]) -> Optional[str]:
@@ -254,7 +254,7 @@ def _try_kibana_auth_winhttp(cert_files: Optional[Tuple[str, str]]) -> Optional[
 
         return None
 
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -289,7 +289,7 @@ def _try_kibana_auth_with_key(cert_files: Optional[Tuple[str, str]]) -> Optional
         else:
             return None
             
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -309,7 +309,7 @@ def _extract_private_key_windows() -> bool:
         
         return False
         
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -331,7 +331,7 @@ def _extract_session_cookie(response) -> Optional[str]:
         
         return None
         
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -525,11 +525,12 @@ def _get_thumbprint_from_cert_files(cert_files: Optional[Tuple[str, str]]) -> Op
         if not cert_path or not os.path.exists(cert_path):
             return None
 
-        cert_pem = open(cert_path, "rb").read()
+        with open(cert_path, "rb") as f:
+            cert_pem = f.read()
         cert = x509.load_pem_x509_certificate(cert_pem, default_backend())
         return cert.fingerprint(hashes.SHA1()).hex().upper()
 
-    except Exception as e:
+    except Exception:
         return None
 
 

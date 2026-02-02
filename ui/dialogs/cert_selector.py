@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import win32crypt
 from typing import Optional
 
 from PySide6.QtWidgets import (
@@ -66,19 +65,6 @@ class CertificateSelectorDialog(QDialog):
         button_box.accepted.connect(self._on_accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
-
-    def _parse_cert_name(self, name_blob: bytes) -> str:
-        """Parse a certificate name from CERT_NAME_BLOB."""
-        try:
-            # Convert CERT_NAME_BLOB to string
-            name_str = win32crypt.CertNameToStr(
-                win32crypt.X509_ASN_ENCODING,
-                name_blob,
-                win32crypt.CERT_X500_NAME_STR
-            )
-            return name_str
-        except Exception:
-            return "Unknown"
 
     def _load_certificates(self):
         """Load certificates from the Windows certificate store."""

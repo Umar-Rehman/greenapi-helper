@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import tempfile
 import os
+import subprocess
+import secrets
 from pathlib import Path
 from typing import Optional
 import atexit
@@ -24,7 +26,6 @@ class CredentialManager:
         self._temp_key_file: Optional[Path] = None
         self._kibana_cookie: Optional[str] = None
         self._temp_dir: Optional[str] = None
-        self._ssl_context: Optional[ssl.SSLContext] = None
 
         # Register cleanup
         atexit.register(self.cleanup)
@@ -55,14 +56,14 @@ class CredentialManager:
             self._temp_cert_file.write_bytes(cert_pem)
 
             # Try to export the private key
-            key_exported = self._export_private_key()
+            self._export_private_key()
             
             # Automatically obtain Kibana session cookie using the certificate
             self._obtain_kibana_session()
             
             return True
 
-        except Exception as e:
+        except Exception:
             self.cleanup()
             raise
 
@@ -79,7 +80,7 @@ class CredentialManager:
             if cookie:
                 self.set_kibana_cookie(cookie)
         
-        except Exception as e:
+        except Exception:
             pass
 
     def _export_private_key(self) -> bool:
@@ -104,7 +105,7 @@ class CredentialManager:
             
             return False
             
-        except Exception as e:
+        except Exception:
             return False
 
     def _export_via_certutil(self) -> bool:
@@ -129,27 +130,10 @@ class CredentialManager:
             cn = cn_attrs[0].value if cn_attrs else "Certificate"
             
             pfx_file = Path(self._temp_dir) / "temp.pfx"
-            pfx_password = "TempPassword123"
+            pfx_password = secrets.token_urlsafe(18)
             
             # Try certutil export by thumbprint (current user store)
-            result = subprocess.run(
-                [
-                    "certutil.exe",
-                    "-user",
-                    "-exportPFX",
-                    "-p", pfx_password,
-                    "-f",
-                    "MY",
-                    thumbprint,
-                    str(pfx_file)
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            if result.returncode != 0:
-                # Fallback: try CN (less reliable)
+            try:
                 result = subprocess.run(
                     [
                         "certutil.exe",
@@ -158,80 +142,100 @@ class CredentialManager:
                         "-p", pfx_password,
                         "-f",
                         "MY",
-                        cn,
+                        thumbprint,
                         str(pfx_file)
                     ],
                     capture_output=True,
                     text=True,
                     timeout=10
                 )
-            
-            if result.returncode == 0 and pfx_file.exists():
-                # Load and extract from PFX
-                from cryptography.hazmat.primitives.serialization import pkcs12
-                
-                pfx_data = pfx_file.read_bytes()
-                private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
-                    pfx_data,
-                    pfx_password.encode(),
-                    backend=default_backend()
-                )
-                
-                if private_key:
-                    # Export key to PEM
-                    key_pem = private_key.private_bytes(
-                        encoding=serialization.Encoding.PEM,
-                        format=serialization.PrivateFormat.TraditionalOpenSSL,
-                        encryption_algorithm=serialization.NoEncryption()
+
+                if result.returncode != 0:
+                    # Fallback: try CN (less reliable)
+                    result = subprocess.run(
+                        [
+                            "certutil.exe",
+                            "-user",
+                            "-exportPFX",
+                            "-p", pfx_password,
+                            "-f",
+                            "MY",
+                            cn,
+                            str(pfx_file)
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
                     )
-                    
-                    self._temp_key_file = Path(self._temp_dir) / "client.key"
-                    self._temp_key_file.write_bytes(key_pem)
-                    
-                    pfx_file.unlink()
-                    return True
-                
-                pfx_file.unlink()
+
+                if result.returncode == 0 and pfx_file.exists():
+                    # Load and extract from PFX
+                    from cryptography.hazmat.primitives.serialization import pkcs12
+
+                    pfx_data = pfx_file.read_bytes()
+                    private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
+                        pfx_data,
+                        pfx_password.encode(),
+                        backend=default_backend()
+                    )
+
+                    if private_key:
+                        # Export key to PEM
+                        key_pem = private_key.private_bytes(
+                            encoding=serialization.Encoding.PEM,
+                            format=serialization.PrivateFormat.TraditionalOpenSSL,
+                            encryption_algorithm=serialization.NoEncryption()
+                        )
+
+                        self._temp_key_file = Path(self._temp_dir) / "client.key"
+                        self._temp_key_file.write_bytes(key_pem)
+                        return True
+
+                return False
+            finally:
+                try:
+                    if pfx_file.exists():
+                        pfx_file.unlink()
+                except Exception:
+                    pass
             
-            return False
-            
-        except Exception as e:
+        except Exception:
             return False
 
-    def _export_via_oscrypto(self) -> bool:
-        """Try using oscrypto library to export the key."""
-        try:
-            import oscrypto
-            from oscrypto import asymmetric
+    # def _export_via_oscrypto(self) -> bool:
+    #     """Try using oscrypto library to export the key."""
+    #     try:
+    #         import oscrypto
+    #         from oscrypto import asymmetric
             
-            # oscrypto can work with Windows certificate stores
-            # This is a more elegant approach but requires the library
-            # Note: Full implementation depends on oscrypto API
+    #         # oscrypto can work with Windows certificate stores
+    #         # This is a more elegant approach but requires the library
+    #         # Note: Full implementation depends on oscrypto API
             
-            return False
+    #         return False
             
-        except ImportError:
-            return False
-        except Exception as e:
-            return False
+    #     except ImportError:
+    #         return False
+    #     except Exception:
+    #         return False
 
-    def _export_via_windows_api(self) -> bool:
-        """Try using pywin32 Windows API to export the key."""
-        try:
-            import ctypes
-            from ctypes import c_void_p, POINTER, c_uint32
+    # def _export_via_windows_api(self) -> bool:
+    #     """Try using pywin32 Windows API to export the key."""
+    #     try:
+    #         import ctypes
+    #         from ctypes import c_void_p, POINTER, c_uint32
             
-            # This is very complex and requires proper CryptoAPI setup
-            # For now, we'll document this and return False
-            # Full implementation would require:
-            # 1. CryptFindCertificateKeyProvInfo to find key provider
-            # 2. CryptGetUserKey to get the key handle
-            # 3. CryptExportKey to export the key
+    #         # This is very complex and requires proper CryptoAPI setup
+    #         # For now, we'll document this and return False
+    #         # Full implementation would require:
+    #         # 1. CryptFindCertificateKeyProvInfo to find key provider
+    #         # 2. CryptGetUserKey to get the key handle
+    #         # 3. CryptExportKey to export the key
             
-            return False
+    #         return False
             
-        except Exception as e:
-            return False
+    #     except Exception:
+    #         return False
 
     def get_certificate_files(self) -> Optional[tuple[str, str]]:
         """
@@ -295,7 +299,7 @@ class CredentialManager:
                 shutil.rmtree(self._temp_dir, ignore_errors=True)
                 self._temp_dir = None
 
-        except Exception as e:
+        except Exception:
             pass
 
     def clear(self):
