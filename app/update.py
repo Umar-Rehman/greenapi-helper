@@ -158,7 +158,8 @@ class UpdateManager(QtCore.QObject):
                 url = asset.get("browser_download_url", "")
                 logger.info(f"Found asset URL: {url}")
                 return url
-        fallback = f"https://github.com/Umar-Rehman/greenapi-helper/releases/download/v{release_data.get('tag_name', '')}/greenapi-helper.exe"
+        tag = release_data.get("tag_name", "")
+        fallback = f"https://github.com/Umar-Rehman/greenapi-helper/releases/download/v{tag}/greenapi-helper.exe"
         logger.info(f"Using fallback URL: {fallback}")
         return fallback
 
