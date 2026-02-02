@@ -1,8 +1,8 @@
 {
-  "version": "1.4.4",
-  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.4.4/greenapi-helper.exe",
+  "version": "1.4.5",
+  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.4.5/greenapi-helper.exe",
   "changelog_url": "https://github.com/Umar-Rehman/greenapi-helper/releases",
   "minimum_version": "1.0.0",
   "release_date": "2026-02-02",
-  "notes": "Bug fixes and code formatting improvements. Enhanced compatibility with Python 3.14."
+  "notes": "Improved auto-update reliability with better error handling and user feedback."
 }
