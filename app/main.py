@@ -2,6 +2,7 @@ import time
 import json
 import traceback
 import os
+import sys
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.resources import resource_path
 from app.update import get_update_manager, get_current_version
@@ -189,7 +190,7 @@ class App(QtWidgets.QWidget):
         root.addWidget(self.instance_input)
 
     def _create_reauthenticate_button(self, root):
-        reauth_btn = QtWidgets.QPushButton("🔑 Re-authenticate Kibana Session")
+        reauth_btn = QtWidgets.QPushButton("Re-authenticate Kibana Session")
         reauth_btn.clicked.connect(self._reauthenticate_kibana)
         reauth_btn.setToolTip("Clear all credentials and allow certificate re-selection")
         root.addWidget(reauth_btn)
