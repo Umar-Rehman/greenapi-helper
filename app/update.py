@@ -284,6 +284,19 @@ class UpdateManager(QtCore.QObject):
             logger.info(f"Current exe: {current_exe}")
             dialog.log(f"Current exe: {current_exe}")
 
+            # Backup MEI folder if running as frozen executable (PyInstaller)
+            mei_backup = None
+            mei_path = getattr(sys, "_MEIPASS", None)
+            if mei_path and os.path.isdir(mei_path):
+                mei_backup = os.path.join(tempfile.gettempdir(), "_MEI_backup")
+                logger.info(f"Backing up MEI folder: {mei_path} -> {mei_backup}")
+                dialog.log("Backing up runtime dependencies...")
+                if os.path.exists(mei_backup):
+                    shutil.rmtree(mei_backup)
+                shutil.copytree(mei_path, mei_backup)
+                logger.info("MEI backup complete")
+                dialog.log("Backup complete")
+
             # Verify downloaded file exists and has size
             if not os.path.exists(new_exe_path):
                 logger.error(f"Downloaded file doesn't exist: {new_exe_path}")
@@ -310,53 +323,72 @@ class UpdateManager(QtCore.QObject):
             dialog.log("Copy successful")
             dialog.set_progress(80)
 
-            # Create batch script with better error handling
+            # Create batch script with MEI restore and file replacement
             batch_script = current_exe + ".updater.bat"
-            batch_content = f"""@echo off
-setlocal enabledelayedexpansion
 
-echo Updating Green API Helper...
-echo Waiting for main application to close completely...
-timeout /t 15 /nobreak > nul
+            # Include MEI restore if backup exists
+            mei_restore_cmd = ""
+            if mei_backup:
+                mei_restore_cmd = (
+                    "\necho Restoring runtime dependencies...\n"
+                    'tasklist /FI "IMAGENAME eq greenapi-helper.exe" 2>NUL | find /I /N "greenapi-helper.exe">NUL\n'
+                    'if "%ERRORLEVEL%" == "0" (\n'
+                    "    echo Waiting for old process to fully terminate...\n"
+                    "    timeout /t 2 /nobreak > nul\n"
+                    ")\n"
+                    f'rmdir /s /q "{tempfile.gettempdir()}\\\\*MEI*" >nul 2>&1\n'
+                    f'xcopy /e /i /y "{mei_backup}" "{tempfile.gettempdir()}\\\\*MEI_backup" >nul\n'
+                )
 
-REM Retry loop for file replacement (handles file locks)
-set retries=5
-set retry_count=0
-
-:retry_replace
-if !retry_count! geq !retries! (
-    echo ERROR: Failed to replace executable after !retries! attempts
-    pause
-    exit /b 1
-)
-
-if exist "{updated_exe}" (
-    move /Y "{updated_exe}" "{current_exe}" >nul 2>&1
-    if errorlevel 1 (
-        set /A retry_count=!retry_count! + 1
-        echo Retry !retry_count!...
-        timeout /t 2 /nobreak > nul
-        goto retry_replace
-    )
-) else (
-    echo ERROR: Updated file not found at {updated_exe}
-    pause
-    exit /b 1
-)
-
-echo Executable replaced successfully!
-echo Launching updated application...
-timeout /t 1 /nobreak > nul
-
-set "APPDIR=%~dp0"
-cd /d "%APPDIR%"
-start "" /d "%APPDIR%" "%APPDIR%greenapi-helper.exe"
-
-echo.
-echo Update complete. You can close this window.
-timeout /t 3 /nobreak > nul
-del "%~f0"
-"""
+            batch_content = (
+                "@echo off\n"
+                "setlocal enabledelayedexpansion\n"
+                "\n"
+                "echo Updating Green API Helper...\n"
+                "echo Waiting for main application to close completely...\n"
+                "timeout /t 15 /nobreak > nul\n"
+                f"{mei_restore_cmd}"
+                "REM Retry loop for file replacement (handles file locks)\n"
+                "set retries=5\n"
+                "set retry_count=0\n"
+                "\n"
+                ":retry_replace\n"
+                "if !retry_count! geq !retries! (\n"
+                "    echo ERROR: Failed to replace executable after !retries! attempts\n"
+                "    pause\n"
+                "    exit /b 1\n"
+                ")\n"
+                "\n"
+                f'if exist "{updated_exe}" (\n'
+                f'    move /Y "{updated_exe}" "{current_exe}" >nul 2>&1\n'
+                "    if errorlevel 1 (\n"
+                "        set /A retry_count=!retry_count! + 1\n"
+                "        echo Retry !retry_count!...\n"
+                "        timeout /t 2 /nobreak > nul\n"
+                "        goto retry_replace\n"
+                "    )\n"
+                ") else (\n"
+                f"    echo ERROR: Updated file not found at {updated_exe}\n"
+                "    pause\n"
+                "    exit /b 1\n"
+                ")\n"
+                "\n"
+                "echo Executable replaced successfully!\n"
+                "echo Launching updated application...\n"
+                "timeout /t 1 /nobreak > nul\n"
+                "\n"
+                'set "APPDIR=%~dp0"\n'
+                'cd /d "%APPDIR%"\n'
+                f'start "" /d "%APPDIR%" "{current_exe}"\n'
+                "\n"
+                "echo.\n"
+                "echo Update complete. You can close this window.\n"
+                "timeout /t 3 /nobreak > nul\n"
+                "\n"
+                "REM Clean up backup\n"
+                f'rmdir /s /q "{tempfile.gettempdir()}\\\\*MEI_backup" >nul 2>&1\n'
+                'del "%~f0"\n'
+            )
 
             with open(batch_script, "w") as f:
                 f.write(batch_content)
