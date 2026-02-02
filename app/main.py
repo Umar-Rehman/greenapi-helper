@@ -132,16 +132,32 @@ class App(QtWidgets.QWidget):
         # API method mappings for automatic method generation
         # Format: (status_text, api_func, needs_auth)
         self._api_method_mappings = {
-            'run_get_instance_state': ("Fetching Instance State...", ga.get_instance_state, False),
-            'run_get_instance_settings': ("Fetching Instance Settings...", ga.get_instance_settings, False),
-            'run_get_qr_code': ("Fetching QR code...", ga.get_qr_code, False),
-            'run_get_msg_queue_count': ("Fetching Message Queue Count...", ga.get_msg_queue_count, False),
-            'run_get_msg_queue': ("Fetching Messages Queue...", ga.get_msg_queue, False),
-            'run_get_webhook_count': ("Fetching Webhook Queue Count...", ga.get_webhook_count, False),
-            'run_get_incoming_statuses': ("Fetching Incoming Statuses...", lambda u, i, t: ga.get_incoming_statuses(u, i, t, minutes=1440), True),
-            'run_get_outgoing_statuses': ("Fetching Outgoing Statuses...", lambda u, i, t: ga.get_outgoing_statuses(u, i, t, minutes=1440), True),
-            'run_get_incoming_msgs_journal': ("Fetching Incoming Messages Journal...", lambda u, i, t: ga.get_incoming_msgs_journal(u, i, t, minutes=1440), True),
-            'run_get_outgoing_msgs_journal': ("Fetching Outgoing Messages Journal...", lambda u, i, t: ga.get_outgoing_msgs_journal(u, i, t, minutes=1440), True),
+            "run_get_instance_state": ("Fetching Instance State...", ga.get_instance_state, False),
+            "run_get_instance_settings": ("Fetching Instance Settings...", ga.get_instance_settings, False),
+            "run_get_qr_code": ("Fetching QR code...", ga.get_qr_code, False),
+            "run_get_msg_queue_count": ("Fetching Message Queue Count...", ga.get_msg_queue_count, False),
+            "run_get_msg_queue": ("Fetching Messages Queue...", ga.get_msg_queue, False),
+            "run_get_webhook_count": ("Fetching Webhook Queue Count...", ga.get_webhook_count, False),
+            "run_get_incoming_statuses": (
+                "Fetching Incoming Statuses...",
+                lambda u, i, t: ga.get_incoming_statuses(u, i, t, minutes=1440),
+                True,
+            ),
+            "run_get_outgoing_statuses": (
+                "Fetching Outgoing Statuses...",
+                lambda u, i, t: ga.get_outgoing_statuses(u, i, t, minutes=1440),
+                True,
+            ),
+            "run_get_incoming_msgs_journal": (
+                "Fetching Incoming Messages Journal...",
+                lambda u, i, t: ga.get_incoming_msgs_journal(u, i, t, minutes=1440),
+                True,
+            ),
+            "run_get_outgoing_msgs_journal": (
+                "Fetching Outgoing Messages Journal...",
+                lambda u, i, t: ga.get_outgoing_msgs_journal(u, i, t, minutes=1440),
+                True,
+            ),
         }
 
         root = QtWidgets.QVBoxLayout()
@@ -495,11 +511,11 @@ class App(QtWidgets.QWidget):
             button.setEnabled(True)
 
         # Remove from workers list
-        if hasattr(self, '_workers') and worker in self._workers:
+        if hasattr(self, "_workers") and worker in self._workers:
             self._workers.remove(worker)
 
         # Decrement active operations count
-        if hasattr(self, '_active_operations'):
+        if hasattr(self, "_active_operations"):
             self._active_operations -= 1
 
         # Hide progress when no active operations
@@ -556,7 +572,7 @@ class App(QtWidgets.QWidget):
 
         # Store reference to prevent garbage collection
         worker._btn = btn
-        if not hasattr(self, '_workers'):
+        if not hasattr(self, "_workers"):
             self._workers = []
         self._workers.append(worker)
 
@@ -804,7 +820,7 @@ class App(QtWidgets.QWidget):
     def _with_ctx(self, instance_id: str, call_fn):
         """Runs call_fn(api_url, api_token) with cached context if fresh."""
         # Cache context to avoid repeated validation overhead
-        if not hasattr(self, '_ctx_cache'):
+        if not hasattr(self, "_ctx_cache"):
             self._ctx_cache = {}
 
         cache_key = instance_id
@@ -813,7 +829,9 @@ class App(QtWidgets.QWidget):
         # Check cache first
         if cache_key in self._ctx_cache:
             cached_ctx, cache_time = self._ctx_cache[cache_key]
-            if (current_time - cache_time) < self._ctx_ttl_seconds and self._ctx_is_valid_for_instance(cached_ctx, instance_id):
+            if (current_time - cache_time) < self._ctx_ttl_seconds and self._ctx_is_valid_for_instance(
+                cached_ctx, instance_id
+            ):
                 ctx = cached_ctx
             else:
                 # Cache expired
@@ -858,10 +876,10 @@ class App(QtWidgets.QWidget):
         self._run_async("Fetching information...", work)
 
     def run_get_instance_state(self):
-        self._run_mapped_api_call('run_get_instance_state')
+        self._run_mapped_api_call("run_get_instance_state")
 
     def run_get_instance_settings(self):
-        self._run_mapped_api_call('run_get_instance_settings')
+        self._run_mapped_api_call("run_get_instance_settings")
 
     def run_set_instance_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -926,7 +944,7 @@ class App(QtWidgets.QWidget):
         self._run_async("Rebooting instance...", work)
 
     def run_get_qr_code(self):
-        self._run_mapped_api_call('run_get_qr_code')
+        self._run_mapped_api_call("run_get_qr_code")
 
     def run_get_wa_settings(self):
         instance_id = self._get_instance_id_or_warn()
@@ -947,10 +965,10 @@ class App(QtWidgets.QWidget):
     # Journal API methods
 
     def run_get_incoming_msgs_journal(self):
-        self._run_mapped_api_call('run_get_incoming_msgs_journal')
+        self._run_mapped_api_call("run_get_incoming_msgs_journal")
 
     def run_get_outgoing_msgs_journal(self):
-        self._run_mapped_api_call('run_get_outgoing_msgs_journal')
+        self._run_mapped_api_call("run_get_outgoing_msgs_journal")
 
     def run_get_chat_history(self):
         instance_id = self._get_instance_id_or_warn()
@@ -1008,10 +1026,10 @@ class App(QtWidgets.QWidget):
     # Queue API methods
 
     def run_get_msg_queue_count(self):
-        self._run_mapped_api_call('run_get_msg_queue_count')
+        self._run_mapped_api_call("run_get_msg_queue_count")
 
     def run_get_msg_queue(self):
-        self._run_mapped_api_call('run_get_msg_queue')
+        self._run_mapped_api_call("run_get_msg_queue")
 
     def run_clear_msg_queue(self):
         instance_id = self._get_instance_id_or_warn()
@@ -1045,7 +1063,7 @@ class App(QtWidgets.QWidget):
         self._run_async("Clearing Message Queue to Send...", work)
 
     def run_get_webhook_count(self):
-        self._run_mapped_api_call('run_get_webhook_count')
+        self._run_mapped_api_call("run_get_webhook_count")
 
     def run_clear_webhooks(self):
         instance_id = self._get_instance_id_or_warn()
@@ -1089,10 +1107,10 @@ class App(QtWidgets.QWidget):
     # Status API methods
 
     def run_get_incoming_statuses(self):
-        self._run_mapped_api_call('run_get_incoming_statuses')
+        self._run_mapped_api_call("run_get_incoming_statuses")
 
     def run_get_outgoing_statuses(self):
-        self._run_mapped_api_call('run_get_outgoing_statuses')
+        self._run_mapped_api_call("run_get_outgoing_statuses")
 
     def run_get_status_statistic(self):
         instance_id = self._get_instance_id_or_warn()

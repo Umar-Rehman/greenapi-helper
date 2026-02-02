@@ -101,12 +101,12 @@ class UpdateManager(QtCore.QObject):
         """Download the update executable to a temporary location."""
         try:
             # Create temp file
-            temp_fd, temp_path = tempfile.mkstemp(suffix='.exe')
+            temp_fd, temp_path = tempfile.mkstemp(suffix=".exe")
             os.close(temp_fd)  # Close the file descriptor
 
             # Download the file
             with urllib.request.urlopen(download_url, timeout=30) as response:
-                with open(temp_path, 'wb') as f:
+                with open(temp_path, "wb") as f:
                     shutil.copyfileobj(response, f)
 
             return temp_path
@@ -119,7 +119,7 @@ class UpdateManager(QtCore.QObject):
         """Create a batch script that will replace the current executable and restart."""
         try:
             # Get current executable path
-            if getattr(sys, 'frozen', False):
+            if getattr(sys, "frozen", False):
                 # Running as PyInstaller executable
                 current_exe = sys.executable
             else:
@@ -128,13 +128,15 @@ class UpdateManager(QtCore.QObject):
                 current_exe = os.path.join(app_dir, "dist", "greenapi-helper.exe")
                 if not os.path.exists(current_exe):
                     # If dist doesn't exist, we can't self-update from source
-                    self.update_error.emit("Cannot perform self-update when running from source. Please use manual download.")
+                    self.update_error.emit(
+                        "Cannot perform self-update when running from source. Please use manual download."
+                    )
                     return None
 
             # Create updater batch script
             updater_script = os.path.join(tempfile.gettempdir(), "greenapi_updater.bat")
 
-            script_content = f'''@echo off
+            script_content = f"""@echo off
 echo Updating Green API Helper...
 echo Please wait while the update is installed...
 timeout /t 2 /nobreak > nul
@@ -150,9 +152,9 @@ start "" "{current_exe}"
 
 REM Clean up this script
 del "%~f0"
-'''
+"""
 
-            with open(updater_script, 'w') as f:
+            with open(updater_script, "w") as f:
                 f.write(script_content)
 
             return updater_script
@@ -188,9 +190,11 @@ del "%~f0"
             # Perform automatic self-update
             success = self.perform_self_update(download_url)
             if success:
-                QtWidgets.QMessageBox.information(parent, "Update Started",
-                    "The application will now update and restart automatically.\n"
-                    "This may take a few moments...")
+                QtWidgets.QMessageBox.information(
+                    parent,
+                    "Update Started",
+                    "The application will now update and restart automatically.\n" "This may take a few moments...",
+                )
         elif clicked_button == download_button and download_url:
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
         elif clicked_button == changelog_button and changelog_url:
