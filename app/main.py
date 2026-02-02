@@ -462,6 +462,10 @@ class App(QtWidgets.QWidget):
             worker.deleteLater()
             thread.deleteLater()
 
+            # Hide progress when all jobs are done
+            if not hasattr(self, "_jobs") or len(self._jobs) == 0:
+                self._hide_progress()
+
         # cleanup only when thread is fully stopped
         thread.finished.connect(cleanup, QtCore.Qt.QueuedConnection)
 
