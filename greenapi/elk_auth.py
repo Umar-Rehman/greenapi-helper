@@ -179,13 +179,18 @@ $body = @{{
 }} | ConvertTo-Json -Depth 6
 
 try {{
-    Invoke-WebRequest -Uri ($base + '/internal/security/login') -Method POST -Body $body -Headers $headers -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
+    Invoke-WebRequest -Uri ($base + '/internal/security/login') `
+        -Method POST -Body $body -Headers $headers `
+        -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
 }} catch {{
     $body2 = @{{ username = $user; password = $pass }} | ConvertTo-Json
-    Invoke-WebRequest -Uri ($base + '/api/security/v1/login') -Method POST -Body $body2 -Headers $headers -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
+    Invoke-WebRequest -Uri ($base + '/api/security/v1/login') `
+        -Method POST -Body $body2 -Headers $headers `
+        -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
 }}
 
-foreach ($p in @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})) {{
+$paths = @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})
+foreach ($p in $paths) {{
     $uri = $base + $p
     $cookies = $session.Cookies.GetCookies([Uri]$uri)
     if ($cookies.Count -gt 0) {{

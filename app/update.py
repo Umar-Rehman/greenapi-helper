@@ -21,7 +21,7 @@ def get_current_version() -> str:
         with open(version_file, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("version", "0.0.0")
-    except FileNotFoundError, json.JSONDecodeError, KeyError:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
         # Fallback version if file can't be read
         return "0.0.0"
 
@@ -200,7 +200,7 @@ class UpdateManager(QtCore.QObject):
                             print(f"DEBUG: Downloaded {downloaded}/{total_size} bytes ({progress}%)")  # Debug logging
 
             progress_dialog.setValue(80)  # Ensure we show 80% completion
-            print(f"DEBUG: Download completed successfully")  # Debug logging
+            print("DEBUG: Download completed successfully")  # Debug logging
             return temp_path
 
         except Exception as e:
@@ -257,7 +257,7 @@ del "%~f0"
             with open(updater_script, "w") as f:
                 f.write(script_content)
 
-            print(f"DEBUG: Updater script created successfully")  # Debug logging
+            print("DEBUG: Updater script created successfully")  # Debug logging
             return updater_script
 
         except Exception as e:
