@@ -4,9 +4,13 @@ Auto-update functionality for the Green API Helper application.
 
 import json
 import os
+import sys
+import tempfile
+import shutil
+import subprocess
 import urllib.request
 import urllib.error
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from PySide6 import QtCore, QtWidgets
 
 
@@ -71,6 +75,92 @@ class UpdateManager(QtCore.QObject):
             # If version parsing fails, assume no update available
             return False
 
+    def perform_self_update(self, download_url: str) -> bool:
+        """Download and install update automatically."""
+        try:
+            # Download the update
+            temp_path = self._download_update(download_url)
+            if not temp_path:
+                return False
+
+            # Create and run updater script
+            updater_script = self._create_updater_script(temp_path)
+            if not updater_script:
+                return False
+
+            # Launch updater and exit current app
+            subprocess.Popen([updater_script], shell=True)
+            QtCore.QTimer.singleShot(1000, QtWidgets.QApplication.quit)  # Give time for updater to start
+            return True
+
+        except Exception as e:
+            self.update_error.emit(f"Failed to perform self-update: {str(e)}")
+            return False
+
+    def _download_update(self, download_url: str) -> Optional[str]:
+        """Download the update executable to a temporary location."""
+        try:
+            # Create temp file
+            temp_fd, temp_path = tempfile.mkstemp(suffix='.exe')
+            os.close(temp_fd)  # Close the file descriptor
+
+            # Download the file
+            with urllib.request.urlopen(download_url, timeout=30) as response:
+                with open(temp_path, 'wb') as f:
+                    shutil.copyfileobj(response, f)
+
+            return temp_path
+
+        except Exception as e:
+            self.update_error.emit(f"Failed to download update: {str(e)}")
+            return None
+
+    def _create_updater_script(self, new_exe_path: str) -> Optional[str]:
+        """Create a batch script that will replace the current executable and restart."""
+        try:
+            # Get current executable path
+            if getattr(sys, 'frozen', False):
+                # Running as PyInstaller executable
+                current_exe = sys.executable
+            else:
+                # Running from source - try to find the executable in dist folder
+                app_dir = os.path.dirname(os.path.dirname(__file__))
+                current_exe = os.path.join(app_dir, "dist", "greenapi-helper.exe")
+                if not os.path.exists(current_exe):
+                    # If dist doesn't exist, we can't self-update from source
+                    self.update_error.emit("Cannot perform self-update when running from source. Please use manual download.")
+                    return None
+
+            # Create updater batch script
+            updater_script = os.path.join(tempfile.gettempdir(), "greenapi_updater.bat")
+
+            script_content = f'''@echo off
+echo Updating Green API Helper...
+echo Please wait while the update is installed...
+timeout /t 2 /nobreak > nul
+
+REM Wait for main application to fully exit
+timeout /t 1 /nobreak > nul
+
+REM Replace the old executable with the new one
+move /Y "{new_exe_path}" "{current_exe}"
+
+REM Launch the updated application
+start "" "{current_exe}"
+
+REM Clean up this script
+del "%~f0"
+'''
+
+            with open(updater_script, 'w') as f:
+                f.write(script_content)
+
+            return updater_script
+
+        except Exception as e:
+            self.update_error.emit(f"Failed to create updater script: {str(e)}")
+            return None
+
     def show_update_dialog(self, update_info: Dict[str, Any], parent: QtWidgets.QWidget) -> None:
         """Show a dialog informing the user about available updates."""
         version = update_info.get("version", "Unknown")
@@ -85,7 +175,8 @@ class UpdateManager(QtCore.QObject):
         msg_box.setInformativeText(f"Current version: {get_current_version()}\n\n{notes}")
 
         # Add buttons
-        download_button = msg_box.addButton("Download", QtWidgets.QMessageBox.AcceptRole)
+        update_now_button = msg_box.addButton("Update Now", QtWidgets.QMessageBox.AcceptRole)
+        download_button = msg_box.addButton("Download Manually", QtWidgets.QMessageBox.ActionRole)
         changelog_button = msg_box.addButton("View Changelog", QtWidgets.QMessageBox.HelpRole)
         msg_box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
 
@@ -93,7 +184,14 @@ class UpdateManager(QtCore.QObject):
 
         clicked_button = msg_box.clickedButton()
 
-        if clicked_button == download_button and download_url:
+        if clicked_button == update_now_button and download_url:
+            # Perform automatic self-update
+            success = self.perform_self_update(download_url)
+            if success:
+                QtWidgets.QMessageBox.information(parent, "Update Started",
+                    "The application will now update and restart automatically.\n"
+                    "This may take a few moments...")
+        elif clicked_button == download_button and download_url:
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
         elif clicked_button == changelog_button and changelog_url:
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
