@@ -50,7 +50,5 @@ class TestClient:
         """Test get instance state function."""
         with patch("greenapi.client.make_api_call") as mock_call:
             mock_call.return_value = '{"stateInstance": "authorized"}'
-            result = client.get_instance_state(
-                "https://api.example.com", "12345", "token123"
-            )
+            result = client.get_instance_state("https://api.example.com", "12345", "token123")
             assert result == '{"stateInstance": "authorized"}'

@@ -124,9 +124,7 @@ class TestApp:
 
     @patch("app.main.QtWidgets.QProgressDialog")
     @patch("app.main.get_kibana_session_cookie_with_password")
-    def test_authenticate_kibana_progress_dialog_creation(
-        self, mock_get_cookie, mock_progress_dialog, app
-    ):
+    def test_authenticate_kibana_progress_dialog_creation(self, mock_get_cookie, mock_progress_dialog, app):
         """Test that the authentication progress dialog is created with correct settings."""
         # Mock the progress dialog
         mock_dialog = MagicMock()
@@ -136,9 +134,7 @@ class TestApp:
         mock_get_cookie.return_value = "test_cookie"
 
         # Set environment variables to trigger the progress dialog path
-        with patch.dict(
-            os.environ, {"KIBANA_USER": "testuser", "KIBANA_PASS": "testpass"}
-        ):
+        with patch.dict(os.environ, {"KIBANA_USER": "testuser", "KIBANA_PASS": "testpass"}):
             # Call the method that creates the progress dialog
             result = app._authenticate_kibana()
 
@@ -146,17 +142,13 @@ class TestApp:
         assert result is True
 
         # Verify the progress dialog was created with correct parameters
-        mock_progress_dialog.assert_called_once_with(
-            "Authenticating with Kibana...", "Please wait...", 0, 0, app
-        )
+        mock_progress_dialog.assert_called_once_with("Authenticating with Kibana...", "Please wait...", 0, 0, app)
 
         # Verify dialog settings
         mock_dialog.setWindowModality.assert_called_once_with(QtCore.Qt.WindowModal)
         mock_dialog.setWindowTitle.assert_called_once_with("Kibana Authentication")
         mock_dialog.setCancelButton.assert_called_once_with(None)
         mock_dialog.setMinimumDuration.assert_called_once_with(0)
-        mock_dialog.setLabelText.assert_called_once_with(
-            "Authenticating with Kibana using certificate..."
-        )
+        mock_dialog.setLabelText.assert_called_once_with("Authenticating with Kibana using certificate...")
         mock_dialog.show.assert_called_once()
         mock_dialog.close.assert_called_once()

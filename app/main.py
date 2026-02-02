@@ -313,7 +313,7 @@ class App(QtWidgets.QWidget):
     @QtCore.Slot(object)
     def _on_worker_result(self, payload, worker=None, button=None):
         # Update status to show success
-        self.status_label.setText("✅ Operation completed")
+        self.status_label.setText("Operation completed")
         self.status_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
 
         # Schedule status reset after a short delay
@@ -494,7 +494,7 @@ class App(QtWidgets.QWidget):
     def _on_worker_error(self, err: str, worker=None, button=None):
         """Handle errors from background worker threads."""
         # Update status to show error
-        self.status_label.setText("❌ Operation failed")
+        self.status_label.setText("Operation failed")
         self.status_label.setStyleSheet("font-weight: bold; color: #f44336;")
 
         # Schedule status reset after a delay
@@ -693,7 +693,7 @@ class App(QtWidgets.QWidget):
                     return True
                 else:
                     self.output.setPlainText(
-                        "⚠ Automatic login with environment credentials failed.\n"
+                        "Warning: Automatic login with environment credentials failed.\n"
                         "Please enter your credentials manually..."
                     )
             finally:
@@ -712,7 +712,7 @@ class App(QtWidgets.QWidget):
 
             # Show authentication message in output area
             self.output.setPlainText(
-                f"🔐 Authenticating as {username} with Kibana...\n\n"
+                f"Authenticating as {username} with Kibana...\n\n"
                 "Please wait while we establish a secure connection using your certificate."
             )
             QtWidgets.QApplication.processEvents()  # Allow UI to update
@@ -727,7 +727,7 @@ class App(QtWidgets.QWidget):
                 else:
                     # Authentication failed - show message and allow retry
                     self.output.setPlainText(
-                        "❌ Kibana authentication failed. This could be due to:\n"
+                        "Kibana authentication failed. This could be due to:\n"
                         "• Incorrect username or password\n"
                         "• Network issues\n"
                         "• Certificate problems\n\n"
@@ -738,7 +738,7 @@ class App(QtWidgets.QWidget):
             except Exception as e:
                 # Handle authentication exceptions
                 self.output.setPlainText(
-                    f"❌ Authentication error: {str(e)}\n\n"
+                    f"Authentication error: {str(e)}\n\n"
                     "You can try again by entering different credentials, or cancel to skip Kibana authentication."
                 )
                 QtWidgets.QApplication.processEvents()  # Allow UI to update

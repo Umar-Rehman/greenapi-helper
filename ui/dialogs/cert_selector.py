@@ -147,7 +147,7 @@ class CertificateSelectorDialog(QDialog):
                 # No usable certificates found, show all for debugging
                 for cert_info in all_certs_found:
                     self._certificates.append(cert_info)
-                    status = "⚠ No Private Key"
+                    status = "No Private Key"
                     display_text = f"{cert_info['cn']} - {status} [{cert_info['store']}]"
                     item = QListWidgetItem(display_text)
                     item.setData(Qt.UserRole, len(self._certificates) - 1)
@@ -199,7 +199,7 @@ class CertificateSelectorDialog(QDialog):
 
         # Add warning if no private key
         if not cert_info.get("has_key", True):
-            details += "<br><b style='color: red;'>⚠ No Private Key</b><br>"
+            details += "<br><b style='color: red;'>No Private Key</b><br>"
             details += "This certificate cannot be used for authentication.<br>"
             details += "Please import a certificate with a private key."
 
