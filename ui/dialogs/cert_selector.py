@@ -7,11 +7,9 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QPushButton,
     QDialogButtonBox,
     QMessageBox,
     QStyleFactory,
