@@ -193,17 +193,6 @@ class UpdateManager(QtCore.QObject):
             current_exe = sys.executable
             updater_script = os.path.join(tempfile.gettempdir(), "greenapi_updater.bat")
 
-            # Escape special characters in paths for batch files
-            # Parentheses need to be escaped with ^ in batch files
-            def escape_batch_path(path):
-                """Escape special characters in batch file paths."""
-                # Replace ( and ) with ^( and ^) for batch file compatibility
-                path = path.replace("(", "^(").replace(")", "^)")
-                return path
-
-            escaped_new = escape_batch_path(new_exe_path)
-            escaped_current = escape_batch_path(current_exe)
-
             script_content = f"""@echo off
 echo Updating Green API Helper...
 timeout /t 2 /nobreak > nul
@@ -212,7 +201,7 @@ REM Wait for application to exit
 timeout /t 1 /nobreak > nul
 
 REM Replace executable
-move /Y "{escaped_new}" "{escaped_current}"
+move /Y "{new_exe_path}" "{current_exe}"
 
 REM Show completion message
 echo.
@@ -266,18 +255,20 @@ del "%~f0"
         result = msg_box.exec()
 
         # Handle button clicks
-        if can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url:
+        if can_self_update and result == QtWidgets.QMessageBox.AcceptRole:
+            # Update Now button (frozen exe only)
             self.perform_self_update(download_url, parent)
-        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole) or (
-            can_self_update and result == QtWidgets.QMessageBox.ActionRole
+        elif (can_self_update and result == QtWidgets.QMessageBox.ActionRole) or (
+            not can_self_update and result == QtWidgets.QMessageBox.AcceptRole
         ):
-            # Open GitHub release page (changelog_url) for manual download
+            # Download Manually button - open GitHub release page
             url_to_open = changelog_url if changelog_url else download_url
-            QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
-        elif (can_self_update and result == QtWidgets.QMessageBox.HelpRole and changelog_url) or (
-            not can_self_update and result == QtWidgets.QMessageBox.ActionRole and changelog_url
-        ):
-            QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
+            if url_to_open:
+                QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
+        elif result == QtWidgets.QMessageBox.HelpRole:
+            # View Changelog button
+            if changelog_url:
+                QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
 
 
 def get_update_manager() -> UpdateManager:
