@@ -129,11 +129,11 @@ class UpdateManager(QtCore.QObject):
                 return False
 
             # Show completion
-            progress.setLabelText("Update ready! Application will restart...")
+            progress.setLabelText("Update ready! Please restart the application manually.")
             progress.setValue(100)
             progress.setCancelButtonText("Close")
 
-            # Launch updater and exit
+            # Launch updater and exit (no automatic restart)
             QtCore.QTimer.singleShot(1500, progress.close)
             QtCore.QTimer.singleShot(2000, lambda: subprocess.Popen([updater_script], shell=True))
             QtCore.QTimer.singleShot(2500, QtWidgets.QApplication.quit)
@@ -206,8 +206,14 @@ timeout /t 1 /nobreak > nul
 REM Replace executable
 move /Y "{escaped_new}" "{escaped_current}"
 
-REM Launch updated application
-start "" "{escaped_current}"
+REM Show completion message
+echo.
+echo ====================================
+echo Update completed successfully!
+echo Please restart the application.
+echo ====================================
+echo.
+pause
 
 REM Clean up
 del "%~f0"
