@@ -32,6 +32,13 @@ __pycache__/
 .vscode/
 .idea/
 
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+.pytest_cache/
+
 # Archives
 *.zip
 

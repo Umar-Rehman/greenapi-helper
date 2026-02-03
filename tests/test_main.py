@@ -77,7 +77,7 @@ class TestApp:
         """Test SSL certificate error handling."""
         error = "SSL Certificate Error: certificate verify failed"
         result = app._handle_api_error(error)
-        assert "SSL Certificate Error" in result
+        assert "Certificate Error" in result
 
     def test_handle_api_error_timeout(self, app):
         """Test timeout error handling."""

@@ -9,9 +9,10 @@ from dotenv import load_dotenv
 
 load_dotenv(".env.local")
 
-KIBANA_URL = "https://elk.prod.greenapi.org"
-SEARCH_SIZE = 50
-TIME_GTE = "now-7d"
+# Configuration with environment variable support
+KIBANA_URL = os.getenv("KIBANA_URL", "https://elk.prod.greenapi.org")
+SEARCH_SIZE = int(os.getenv("SEARCH_SIZE", "50"))
+TIME_GTE = os.getenv("TIME_GTE", "now-7d")
 KIBANA_AUTH_PATHS = ["/internal/security/me", "/api/security/v1/me", "/api/status"]
 
 # Helper functions
@@ -96,7 +97,11 @@ def _try_kibana_auth_cert_only(cert_files: Optional[Tuple[str, str]]) -> Optiona
 
         return None
 
-    except Exception:
+    except Exception as e:
+        # Log error for debugging but don't fail - try next method
+        import sys
+
+        print(f"Cert-only auth failed: {e}", file=sys.stderr)
         return None
 
 
@@ -105,6 +110,9 @@ def _try_kibana_auth_powershell(cert_files: Optional[Tuple[str, str]]) -> Option
     try:
         thumbprint = _get_thumbprint_from_cert_files(cert_files)
         if not thumbprint:
+            import sys
+
+            print("PowerShell auth: No certificate thumbprint found", file=sys.stderr)
             return None
 
         script = f"""
@@ -133,6 +141,9 @@ foreach ($p in $paths) {{
         )
 
         if result.returncode != 0:
+            import sys
+
+            print(f"PowerShell auth failed: {result.stderr}", file=sys.stderr)
             return None
 
         cookie = (result.stdout or "").strip()

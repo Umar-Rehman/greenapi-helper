@@ -49,14 +49,6 @@ class App(QtWidgets.QWidget):
         self._ctx_ttl_seconds = 10 * 60
         self._last_chat_id = None
 
-        # Thread pool for async operations (optimization)
-        self._thread_pool = QtCore.QThreadPool.globalInstance()
-        self._thread_pool.setMaxThreadCount(4)  # Limit concurrent operations
-
-        # JSON parsing cache (optimization)
-        self._json_cache = {}
-        self._json_cache_max_size = 10
-
         # Initialize update manager
         self.update_manager = get_update_manager()
         self.update_manager.update_available.connect(self._on_update_available)
@@ -390,7 +382,7 @@ class App(QtWidgets.QWidget):
         data = result
         if isinstance(result, str) and (result.strip().startswith(("{", "["))):
             try:
-                data = self._parse_json_cached(result.strip())
+                data = json.loads(result.strip())
             except Exception:
                 self.output.setPlainText(self._pretty_print(result))
                 return
@@ -418,77 +410,53 @@ class App(QtWidgets.QWidget):
         self.output.setPlainText(self._pretty_print(data))
 
     def _handle_api_error(self, error: str) -> str:
-        """Parse and display user-friendly error messages for API failures.
-
-        Args:
-            error: Raw error string from API call
-
-        Returns:
-            User-friendly error message
-        """
+        """Parse and display user-friendly error messages for API failures."""
         error_lower = error.lower()
 
-        # Handle specific error types first (before generic HTTP errors)
-        if "ssl certificate error" in error_lower:
-            return "SSL Certificate Error: Please check your client certificate and try again."
-        elif "certificate" in error_lower and "error" in error_lower:
+        # HTTP status code mapping
+        http_errors = {
+            "http 400": "Bad Request (400): Invalid request parameters. Please check your input.",
+            "http 401": "Authentication Failed (401): Invalid API token or credentials.",
+            "http 403": "Access Denied (403): Insufficient permissions for this operation.",
+            "http 404": "Not Found (404): The requested resource doesn't exist.",
+            "http 429": "Rate Limited (429): Too many requests. Please wait and try again.",
+            "http 500": "Server Error (500): Green API server error. Please try again later.",
+            "http 502": "Bad Gateway (502): Server temporarily unavailable. Please try again.",
+            "http 503": "Service Unavailable (503): Server is temporarily down. Please try again later.",
+        }
+
+        # Check HTTP status codes first
+        for code, message in http_errors.items():
+            if code in error_lower:
+                return message
+
+        # Certificate errors
+        if "ssl certificate error" in error_lower or ("certificate" in error_lower and "error" in error_lower):
             return "Certificate Error: Please verify your certificate is properly configured."
-        elif "request error:" in error_lower:
-            # Handle requests library errors
-            if "timed out" in error_lower or "timeout" in error_lower:
-                return "Request Timeout: The server took too long to respond. Please try again."
-            elif "connection" in error_lower and ("refused" in error_lower or "failed" in error_lower):
-                return "Connection Error: Unable to connect to Green API. Check your internet connection."
-            elif "dns" in error_lower or "name resolution" in error_lower:
-                return "DNS Error: Unable to resolve server address. Check your network settings."
-            else:
-                return f"Network Error: {error.split(':', 1)[1].strip() if ':' in error else error}"
-        elif "timeout" in error_lower:
+
+        # Network errors
+        if "timeout" in error_lower or "timed out" in error_lower:
             return "Request Timeout: The server took too long to respond. Please try again."
-        elif "connection" in error_lower and ("refused" in error_lower or "failed" in error_lower):
+        if "connection" in error_lower and ("refused" in error_lower or "failed" in error_lower):
             return "Connection Error: Unable to connect to Green API. Check your internet connection."
-        elif "dns" in error_lower or "name resolution" in error_lower:
+        if "dns" in error_lower or "name resolution" in error_lower:
             return "DNS Error: Unable to resolve server address. Check your network settings."
 
-        # Handle HTTP status codes
-        if "http 400" in error_lower:
-            return "Bad Request (400): Invalid request parameters. Please check your input."
-        elif "http 401" in error_lower:
-            return "Authentication Failed (401): Invalid API token or credentials."
-        elif "http 403" in error_lower:
-            return "Access Denied (403): Insufficient permissions for this operation."
-        elif "http 404" in error_lower:
-            return "Not Found (404): The requested resource doesn't exist."
-        elif "http 429" in error_lower:
-            return "Rate Limited (429): Too many requests. Please wait and try again."
-        elif "http 500" in error_lower:
-            return "Server Error (500): Green API server error. Please try again later."
-        elif "http 502" in error_lower:
-            return "Bad Gateway (502): Server temporarily unavailable. Please try again."
-        elif "http 503" in error_lower:
-            return "Service Unavailable (503): Server is temporarily down. Please try again later."
-        elif "http" in error_lower and any(code in error for code in ["3", "4", "5"]):
-            # Generic HTTP error for any 3xx, 4xx, or 5xx status
-            return f"API Error: {error.split(':', 1)[1].strip() if ':' in error else error}"
-
-        # Handle API-specific errors in response text
+        # API-specific errors
         if "invalid" in error_lower and "token" in error_lower:
             return "Invalid API Token: Please check your API token and try again."
-        elif "instance" in error_lower and ("not found" in error_lower or "invalid" in error_lower):
+        if "instance" in error_lower and ("not found" in error_lower or "invalid" in error_lower):
             return "Invalid Instance ID: Please verify your Instance ID is correct."
 
-        # For any other errors, try to extract useful information
-        # Remove Python traceback if present
+        # Extract useful information from error
+        if "request error:" in error_lower:
+            return f"Network Error: {error.split(':', 1)[1].strip() if ':' in error else error}"
+
         lines = error.split("\n")
-        for i, line in enumerate(lines):
-            if (
-                "HTTP" in line
-                or "Error:" in line
-                or any(keyword in line.lower() for keyword in ["certificate", "timeout", "connection"])
-            ):
+        for line in lines:
+            if "HTTP" in line or "Error:" in line:
                 return f"API Error: {line.strip()}"
 
-        # Fallback: show a generic message but include original error for debugging
         return f"An error occurred. Please try again.\n\nDetails: {error[:200]}..."
 
     @QtCore.Slot(str)
@@ -499,7 +467,7 @@ class App(QtWidgets.QWidget):
         self.status_label.setStyleSheet("font-weight: bold; color: #f44336;")
 
         # Schedule status reset after a delay
-        QtCore.QTimer.singleShot(3000, lambda: self._reset_status_label())
+        QtCore.QTimer.singleShot(3000, self._hide_progress)
 
         user_friendly_error = self._handle_api_error(err)
         self.output.setPlainText(user_friendly_error)
@@ -523,25 +491,8 @@ class App(QtWidgets.QWidget):
         if self._active_operations <= 0:
             self._hide_progress()
 
-    def _parse_json_cached(self, json_str: str):
-        """Parse JSON with caching to avoid repeated parsing of same data."""
-        if json_str in self._json_cache:
-            return self._json_cache[json_str]
-
-        try:
-            parsed = json.loads(json_str)
-            # Cache the result (LRU-style, keep only recent items)
-            if len(self._json_cache) >= self._json_cache_max_size:
-                # Remove oldest item (simple FIFO)
-                oldest_key = next(iter(self._json_cache))
-                del self._json_cache[oldest_key]
-            self._json_cache[json_str] = parsed
-            return parsed
-        except json.JSONDecodeError:
-            return json_str  # Return as-is if not valid JSON
-
     def _run_async(self, status_text: str, fn):
-        """Run function asynchronously using thread pool (optimized)."""
+        """Run function asynchronously using thread pool."""
         self._set_status(status_text)
         self._show_progress(status_text)
 
@@ -577,8 +528,8 @@ class App(QtWidgets.QWidget):
             self._workers = []
         self._workers.append(worker)
 
-        # Start in thread pool instead of creating new thread
-        self._thread_pool.start(QtCore.QRunnable.create(worker.run))
+        # Start in global thread pool
+        QtCore.QThreadPool.globalInstance().start(QtCore.QRunnable.create(worker.run))
 
     # Helpers
 
@@ -628,20 +579,8 @@ class App(QtWidgets.QWidget):
         self.status_label.setStyleSheet("font-weight: bold; color: #666;")
         self.progress_bar.setVisible(False)
 
-    def _ctx_is_valid_for_instance(self, ctx: dict, instance_id: str) -> bool:
-        """Check if cached context is valid for the given instance."""
-        if not ctx or ctx.get("instance_id") != instance_id:
-            return False
-        tok = (ctx.get("api_token") or "").strip()
-        return bool(tok and tok != "apiToken not found" and not tok.startswith("HTTP ") and ctx.get("api_url"))
-
-    def _reset_status_label(self):
-        """Reset status label to ready state if no operations are active."""
-        if not hasattr(self, "_jobs") or len(self._jobs) == 0:
-            self.status_label.setText("Ready")
-            self.status_label.setStyleSheet("font-weight: bold; color: #666;")
-
     def _ctx_is_valid(self, instance_id: str) -> bool:
+        """Check if cached context is valid for the given instance."""
         if not self._ctx or self._ctx.get("instance_id") != instance_id:
             return False
         if time.time() - float(self._ctx.get("ts", 0)) > self._ctx_ttl_seconds:
@@ -671,7 +610,6 @@ class App(QtWidgets.QWidget):
 
         # Show initial status
         self.output.setPlainText("Starting Kibana authentication...")
-        QtWidgets.QApplication.processEvents()
 
         # Try environment credentials first
         if env_username and env_password:
@@ -716,7 +654,6 @@ class App(QtWidgets.QWidget):
                 f"Authenticating as {username} with Kibana...\n\n"
                 "Please wait while we establish a secure connection using your certificate."
             )
-            QtWidgets.QApplication.processEvents()  # Allow UI to update
 
             try:
                 cookie = get_kibana_session_cookie_with_password(username, password, cred_mgr.get_certificate_files())
@@ -734,7 +671,6 @@ class App(QtWidgets.QWidget):
                         "• Certificate problems\n\n"
                         "You can try again by entering different credentials, or cancel to skip Kibana authentication."
                     )
-                    QtWidgets.QApplication.processEvents()  # Allow UI to update
                     # Loop continues to allow retry
             except Exception as e:
                 # Handle authentication exceptions
@@ -742,7 +678,6 @@ class App(QtWidgets.QWidget):
                     f"Authentication error: {str(e)}\n\n"
                     "You can try again by entering different credentials, or cancel to skip Kibana authentication."
                 )
-                QtWidgets.QApplication.processEvents()  # Allow UI to update
                 # Loop continues to allow retry
 
     def _ensure_authentication(self) -> bool:
@@ -780,7 +715,6 @@ class App(QtWidgets.QWidget):
 
             # Give feedback about Kibana session status
             self.output.setPlainText("Authenticating with Kibana...")
-            QtWidgets.QApplication.processEvents()  # Allow UI to update
 
             if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
                 return False
@@ -820,31 +754,10 @@ class App(QtWidgets.QWidget):
 
     def _with_ctx(self, instance_id: str, call_fn):
         """Runs call_fn(api_url, api_token) with cached context if fresh."""
-        # Cache context to avoid repeated validation overhead
-        if not hasattr(self, "_ctx_cache"):
-            self._ctx_cache = {}
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
 
-        cache_key = instance_id
-        current_time = time.time()
-
-        # Check cache first
-        if cache_key in self._ctx_cache:
-            cached_ctx, cache_time = self._ctx_cache[cache_key]
-            if (current_time - cache_time) < self._ctx_ttl_seconds and self._ctx_is_valid_for_instance(
-                cached_ctx, instance_id
-            ):
-                ctx = cached_ctx
-            else:
-                # Cache expired
-                ctx = self._fetch_ctx(instance_id)
-                self._ctx_cache[cache_key] = (ctx, current_time)
-        else:
-            ctx = self._fetch_ctx(instance_id)
-            self._ctx_cache[cache_key] = (ctx, current_time)
-
-        # Update main context for backward compatibility
-        self._ctx = ctx
-
+        ctx = self._ctx
         token = ctx.get("api_token", "")
         if not token or token == "apiToken not found" or token.startswith("HTTP "):
             return {"ctx": ctx, "error": f"Failed to get apiToken: {token}"}
