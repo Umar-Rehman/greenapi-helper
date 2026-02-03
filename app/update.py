@@ -107,21 +107,25 @@ class UpdateManager(QtCore.QObject):
 
         try:
             # Create progress dialog
-            progress = QtWidgets.QProgressDialog("Preparing update...", "Cancel", 0, 100, parent_widget)
+            progress = QtWidgets.QProgressDialog("Getting latest release...", "Cancel", 0, 100, parent_widget)
             progress.setWindowModality(QtCore.Qt.WindowModal)
             progress.setAutoClose(False)
             progress.setAutoReset(False)
+            progress.setMinimumWidth(400)
+            progress.setMinimumDuration(0)
             progress.show()
+            progress.setValue(5)
 
             # Download update
             progress.setLabelText("Downloading update...")
+            progress.setValue(10)
             temp_path = self._download_update(download_url, progress)
             if not temp_path:
                 progress.close()
                 return False
 
             # Create updater script
-            progress.setLabelText("Preparing installation...")
+            progress.setLabelText("Finalizing installation...")
             progress.setValue(90)
             updater_script = self._create_updater_script(temp_path)
             if not updater_script:
@@ -129,7 +133,7 @@ class UpdateManager(QtCore.QObject):
                 return False
 
             # Show completion
-            progress.setLabelText("Update ready! Please restart the application manually.")
+            progress.setLabelText("Update complete! Please restart the application.")
             progress.setValue(100)
             progress.setCancelButtonText("Close")
 
@@ -168,10 +172,14 @@ class UpdateManager(QtCore.QObject):
                         downloaded += len(chunk)
 
                         if total_size > 0:
-                            percent = int((downloaded / total_size) * 80)
+                            percent = int((downloaded / total_size) * 75) + 10
+                            mb_downloaded = downloaded / (1024 * 1024)
+                            mb_total = total_size / (1024 * 1024)
+                            progress.setLabelText(f"Downloading update... {mb_downloaded:.1f} MB / {mb_total:.1f} MB")
                             progress.setValue(percent)
 
-            progress.setValue(80)
+            progress.setLabelText("Download complete, verifying...")
+            progress.setValue(85)
             return temp_path
 
         except Exception as e:
@@ -260,10 +268,12 @@ del "%~f0"
         # Handle button clicks
         if can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url:
             self.perform_self_update(download_url, parent)
-        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole and download_url) or (
-            can_self_update and result == QtWidgets.QMessageBox.ActionRole and download_url
+        elif (not can_self_update and result == QtWidgets.QMessageBox.AcceptRole) or (
+            can_self_update and result == QtWidgets.QMessageBox.ActionRole
         ):
-            QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
+            # Open GitHub release page (changelog_url) for manual download
+            url_to_open = changelog_url if changelog_url else download_url
+            QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
         elif (can_self_update and result == QtWidgets.QMessageBox.HelpRole and changelog_url) or (
             not can_self_update and result == QtWidgets.QMessageBox.ActionRole and changelog_url
         ):
