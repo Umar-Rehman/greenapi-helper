@@ -110,7 +110,7 @@ greenapi-helper/
 
 ```bash
 # Create executable
-pyinstaller --onefile --windowed --name greenapi-helper app/main.py
+pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets app/main.py
 
 # The executable will be in the dist/ folder
 ```
