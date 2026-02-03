@@ -326,28 +326,19 @@ class UpdateManager(QtCore.QObject):
             # Create batch script with MEI restore and file replacement
             batch_script = current_exe + ".updater.bat"
 
-            # Include MEI restore if backup exists
-            mei_restore_cmd = ""
+            # Include MEI cleanup (remove backup after update)
+            mei_cleanup = ""
             if mei_backup:
-                mei_restore_cmd = (
-                    "\necho Restoring runtime dependencies...\n"
-                    'tasklist /FI "IMAGENAME eq greenapi-helper.exe" 2>NUL | find /I /N "greenapi-helper.exe">NUL\n'
-                    'if "%ERRORLEVEL%" == "0" (\n'
-                    "    echo Waiting for old process to fully terminate...\n"
-                    "    timeout /t 2 /nobreak > nul\n"
-                    ")\n"
-                    f'rmdir /s /q "{tempfile.gettempdir()}\\\\*MEI*" >nul 2>&1\n'
-                    f'xcopy /e /i /y "{mei_backup}" "{tempfile.gettempdir()}\\\\*MEI_backup" >nul\n'
-                )
+                mei_cleanup = f'rmdir /s /q "{mei_backup}" >nul 2>&1\n'
 
             batch_content = (
                 "@echo off\n"
                 "setlocal enabledelayedexpansion\n"
                 "\n"
                 "echo Updating Green API Helper...\n"
-                "echo Waiting for main application to close completely...\n"
-                "timeout /t 15 /nobreak > nul\n"
-                f"{mei_restore_cmd}"
+                "echo Waiting for application to close...\n"
+                "timeout /t 5 /nobreak > nul\n"
+                "\n"
                 "REM Retry loop for file replacement (handles file locks)\n"
                 "set retries=5\n"
                 "set retry_count=0\n"
@@ -355,6 +346,8 @@ class UpdateManager(QtCore.QObject):
                 ":retry_replace\n"
                 "if !retry_count! geq !retries! (\n"
                 "    echo ERROR: Failed to replace executable after !retries! attempts\n"
+                "    echo Please restart the application manually from:\n"
+                f"    echo {os.path.dirname(current_exe)}\n"
                 "    pause\n"
                 "    exit /b 1\n"
                 ")\n"
@@ -373,20 +366,19 @@ class UpdateManager(QtCore.QObject):
                 "    exit /b 1\n"
                 ")\n"
                 "\n"
-                "echo Executable replaced successfully!\n"
-                "echo Launching updated application...\n"
-                "timeout /t 1 /nobreak > nul\n"
-                "\n"
-                'set "APPDIR=%~dp0"\n'
-                'cd /d "%APPDIR%"\n'
-                f'start "" /d "%APPDIR%" "{current_exe}"\n'
-                "\n"
                 "echo.\n"
-                "echo Update complete. You can close this window.\n"
-                "timeout /t 3 /nobreak > nul\n"
+                "echo ========================================\n"
+                "echo Update Complete!\n"
+                "echo ========================================\n"
+                "echo Please restart Green API Helper manually.\n"
+                "echo.\n"
+                f"echo Location: {os.path.dirname(current_exe)}\n"
+                "echo.\n"
+                "echo This window will close in 10 seconds...\n"
+                "timeout /t 10 /nobreak > nul\n"
                 "\n"
-                "REM Clean up backup\n"
-                f'rmdir /s /q "{tempfile.gettempdir()}\\\\*MEI_backup" >nul 2>&1\n'
+                "REM Clean up\n"
+                f"{mei_cleanup}"
                 'del "%~f0"\n'
             )
 
@@ -405,14 +397,21 @@ class UpdateManager(QtCore.QObject):
                 )
                 logger.info("Batch script started - exiting to allow replacement")
                 dialog.log("Update script started - exiting application...")
+                dialog.log("")
+                dialog.log("==========================================")
+                dialog.log("UPDATE WILL BE APPLIED AUTOMATICALLY")
+                dialog.log("==========================================")
+                dialog.log("Please restart Green API Helper manually")
+                dialog.log("after this window closes.")
+                dialog.log("")
                 dialog.set_progress(100)
-                dialog.set_status("Update Complete - Exiting in 2 seconds...")
+                dialog.set_status("Update Complete - Please restart manually")
                 QtWidgets.QApplication.processEvents()
 
-                # Exit after a short delay to show the message
+                # Exit after showing the message
                 import time
 
-                time.sleep(2)
+                time.sleep(3)
                 logger.info("Exiting application now")
                 QtWidgets.QApplication.quit()
                 sys.exit(0)
