@@ -149,6 +149,6 @@ class TestApp:
         mock_dialog.setWindowTitle.assert_called_once_with("Kibana Authentication")
         mock_dialog.setCancelButton.assert_called_once_with(None)
         mock_dialog.setMinimumDuration.assert_called_once_with(0)
-        mock_dialog.setLabelText.assert_called_once_with("Authenticating with Kibana using certificate...")
+        mock_dialog.setLabelText.assert_called_once_with("Authenticating with testuser using certificate...")
         mock_dialog.show.assert_called_once()
         mock_dialog.close.assert_called_once()

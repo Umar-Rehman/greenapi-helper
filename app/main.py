@@ -409,6 +409,11 @@ class App(QtWidgets.QWidget):
 
         self.output.setPlainText(self._pretty_print(data))
 
+    def _reset_status_label(self):
+        """Reset status label to default state."""
+        self.status_label.setText("Ready")
+        self.status_label.setStyleSheet("")
+
     def _handle_api_error(self, error: str) -> str:
         """Parse and display user-friendly error messages for API failures."""
         error_lower = error.lower()
@@ -619,7 +624,7 @@ class App(QtWidgets.QWidget):
             progress.setWindowTitle("Kibana Authentication")
             progress.setCancelButton(None)  # No cancel button
             progress.setMinimumDuration(0)  # Show immediately
-            progress.setLabelText("Authenticating with Kibana using certificate...")
+            progress.setLabelText(f"Authenticating with {env_username} using certificate...")
             progress.show()
 
             try:
@@ -654,6 +659,7 @@ class App(QtWidgets.QWidget):
                 f"Authenticating as {username} with Kibana...\n\n"
                 "Please wait while we establish a secure connection using your certificate."
             )
+            QtWidgets.QApplication.processEvents()  # Force UI update
 
             try:
                 cookie = get_kibana_session_cookie_with_password(username, password, cred_mgr.get_certificate_files())
