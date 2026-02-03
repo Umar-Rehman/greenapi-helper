@@ -70,16 +70,6 @@ jobs:
         git diff --staged --quiet || git commit -m "chore: update coverage report [skip ci]"
         git push
 
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v4
-      if: always()
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
-        token: ${{ secrets.CODECOV_TOKEN }}
-
     - name: Run linting
       run: |
         python -m flake8 --max-line-length=120 --extend-ignore=E203,W503 app/ greenapi/ ui/ --exclude=__pycache__,update_bloated_backup.py
