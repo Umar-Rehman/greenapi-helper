@@ -1088,7 +1088,7 @@ class App(QtWidgets.QWidget):
 
         if can_self_update and clicked_btn == update_btn and download_url:
             # Update Now clicked
-            self.update_manager.perform_simple_update(download_url, self)
+            self.update_manager.perform_self_update(download_url, self)
         elif clicked_btn == manual_btn and download_url:
             # Download Manually clicked
             QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
