@@ -1065,6 +1065,7 @@ class App(QtWidgets.QWidget):
         version = update_info.get("version", "Unknown")
         notes = update_info.get("notes", "New version available")
         download_url = update_info.get("download_url", "")
+        changelog_url = update_info.get("changelog_url", "")
 
         msg_box = QtWidgets.QMessageBox(self)
         msg_box.setWindowTitle("Update Available")
@@ -1087,11 +1088,13 @@ class App(QtWidgets.QWidget):
         clicked_btn = msg_box.clickedButton()
 
         if can_self_update and clicked_btn == update_btn and download_url:
-            # Update Now clicked
+            # Update Now clicked - perform automatic update
             self.update_manager.perform_self_update(download_url, self)
-        elif clicked_btn == manual_btn and download_url:
-            # Download Manually clicked
-            QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(download_url))
+        elif clicked_btn == manual_btn:
+            # Download Manually clicked - open GitHub release page
+            url_to_open = changelog_url if changelog_url else download_url
+            if url_to_open:
+                QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
 
     @QtCore.Slot(str)
     def _on_update_error(self, error_msg: str):

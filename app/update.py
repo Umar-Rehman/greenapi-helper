@@ -185,6 +185,17 @@ class UpdateManager(QtCore.QObject):
             current_exe = sys.executable
             updater_script = os.path.join(tempfile.gettempdir(), "greenapi_updater.bat")
 
+            # Escape special characters in paths for batch files
+            # Parentheses need to be escaped with ^ in batch files
+            def escape_batch_path(path):
+                """Escape special characters in batch file paths."""
+                # Replace ( and ) with ^( and ^) for batch file compatibility
+                path = path.replace("(", "^(").replace(")", "^)")
+                return path
+
+            escaped_new = escape_batch_path(new_exe_path)
+            escaped_current = escape_batch_path(current_exe)
+
             script_content = f"""@echo off
 echo Updating Green API Helper...
 timeout /t 2 /nobreak > nul
@@ -193,10 +204,10 @@ REM Wait for application to exit
 timeout /t 1 /nobreak > nul
 
 REM Replace executable
-move /Y "{new_exe_path}" "{current_exe}"
+move /Y "{escaped_new}" "{escaped_current}"
 
 REM Launch updated application
-start "" "{current_exe}"
+start "" "{escaped_current}"
 
 REM Clean up
 del "%~f0"
