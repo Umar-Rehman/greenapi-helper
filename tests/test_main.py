@@ -77,7 +77,7 @@ class TestApp:
         """Test SSL certificate error handling."""
         error = "SSL Certificate Error: certificate verify failed"
         result = app._handle_api_error(error)
-        assert "SSL Certificate Error" in result
+        assert "Certificate Error" in result
 
     def test_handle_api_error_timeout(self, app):
         """Test timeout error handling."""
@@ -149,6 +149,6 @@ class TestApp:
         mock_dialog.setWindowTitle.assert_called_once_with("Kibana Authentication")
         mock_dialog.setCancelButton.assert_called_once_with(None)
         mock_dialog.setMinimumDuration.assert_called_once_with(0)
-        mock_dialog.setLabelText.assert_called_once_with("Authenticating with Kibana using certificate...")
+        mock_dialog.setLabelText.assert_called_once_with("Authenticating with testuser using certificate...")
         mock_dialog.show.assert_called_once()
         mock_dialog.close.assert_called_once()

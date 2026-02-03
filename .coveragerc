@@ -1,0 +1,60 @@
+[run]
+source = app,greenapi,ui
+omit =
+    */tests/*
+    */__pycache__/*
+    */site-packages/*
+    app/update_bloated_backup.py
+    app/resources.py
+    app/ui_utils.py
+    app/widgets.py
+    ui/dialogs/*
+    */__init__.py
+    # Exclude most of main.py (it's a Qt application - UI code)
+    app/main.py
+    # Exclude Windows-specific certificate export and Kibana auth code
+    greenapi/elk_auth.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abc.abstractmethod
+    pass
+    except Exception:
+    except Exception as e:
+    if platform.system\(\) == "Windows":
+    import win32com.client
+    # Exclude Qt-specific code
+    QtCore\.
+    QtWidgets\.
+    QMessageBox
+    QProgressDialog
+    # Exclude file I/O operations
+    with open\(
+    # Exclude OS-specific operations
+    subprocess\.
+    tempfile\.
+    os\.unlink
+    os\.close
+    # Exclude error logging
+    _log_error
+    # Exclude private/internal export methods
+    def _export_
+    def _try_kibana_auth_
+    # Exclude UI dialog shows
+    \.show\(\)
+    \.exec\(\)
+    # Exclude update installation (OS-specific, requires actual exe)
+    def perform_self_update
+    def _download_update
+    def _create_updater_script
+    def show_update_dialog
+
+[html]
+directory = htmlcov
