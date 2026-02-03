@@ -52,3 +52,30 @@ class TestClient:
             mock_call.return_value = '{"stateInstance": "authorized"}'
             result = client.get_instance_state("https://api.example.com", "12345", "token123")
             assert result == '{"stateInstance": "authorized"}'
+
+    def test_certificate_files_cache(self):
+        """Test that get_certificate_files uses lru_cache correctly."""
+        # Clear any existing cache
+        client.get_certificate_files.cache_clear()
+        
+        # First call should execute
+        result1 = client.get_certificate_files()
+        assert result1 == ("client.crt", "client.key")
+        
+        # Second call should return cached result
+        result2 = client.get_certificate_files()
+        assert result2 == result1
+        
+        # Verify cache_info shows hits
+        cache_info = client.get_certificate_files.cache_info()
+        assert cache_info.hits >= 1
+        assert cache_info.misses >= 1
+        
+        # Setting new certificates should clear cache
+        client.set_certificate_files("new.crt", "new.key")
+        result3 = client.get_certificate_files()
+        assert result3 == ("new.crt", "new.key")
+        
+        # Reset for other tests
+        client._fallback_cert_files = None
+        client.get_certificate_files.cache_clear()

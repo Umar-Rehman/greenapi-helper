@@ -10,17 +10,17 @@ def update_version_info():
     # Read current version
     with open("version.json", "r", encoding="utf-8") as f:
         version_data = json.load(f)
-    
+
     version = version_data["version"]
     version_parts = version.split(".")
-    
+
     # Pad to 4 parts if needed
     while len(version_parts) < 4:
         version_parts.append("0")
-    
+
     version_tuple = ", ".join(version_parts)
     version_str = ".".join(version_parts)
-    
+
     # Template for version_info.txt
     template = f"""# UTF-8
 #
@@ -55,11 +55,11 @@ VSVersionInfo(
   ]
 )
 """
-    
+
     # Write version_info.txt
     with open("version_info.txt", "w", encoding="utf-8") as f:
         f.write(template)
-    
+
     print(f"Updated version_info.txt to version {version}")
 
 
