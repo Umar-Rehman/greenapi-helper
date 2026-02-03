@@ -1,4 +1,5 @@
 import requests
+from functools import lru_cache
 from typing import Optional, Tuple
 
 # Configuration
@@ -14,10 +15,16 @@ def set_certificate_files(cert_path: str, key_path: str):
     """Set certificate files to use for API calls."""
     global _fallback_cert_files
     _fallback_cert_files = (cert_path, key_path)
+    # Clear cache when certificates change
+    get_certificate_files.cache_clear()
 
 
+@lru_cache(maxsize=1)
 def get_certificate_files() -> Tuple[str, str]:
-    """Get certificate files, using fallback if credential manager not set."""
+    """Get certificate files, using fallback if credential manager not set.
+
+    Cached to avoid repeated file system checks.
+    """
     if _fallback_cert_files:
         return _fallback_cert_files
 

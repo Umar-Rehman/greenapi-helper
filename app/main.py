@@ -162,18 +162,18 @@ class App(QtWidgets.QWidget):
         self.setLayout(root)
 
     def _run_mapped_api_call(self, method_name: str):
-        """Generic handler for simple API calls using the mapping."""
+        """Generic handler for API calls using the mapping.
+
+        Consolidated method that handles both simple and authenticated API calls
+        through the mapping table, avoiding duplicate authentication checks.
+        """
         if method_name not in self._api_method_mappings:
             raise ValueError(f"Unknown API method: {method_name}")
 
         status_text, api_func, needs_auth = self._api_method_mappings[method_name]
 
-        if needs_auth:
-            # Methods that need authentication
-            instance_id = self._get_instance_id_or_warn()
-            if not instance_id or not self._ensure_authentication():
-                return
-
+        # _run_simple_api_call already handles auth, so just call it
+        # The needs_auth flag is kept in mapping for documentation purposes
         self._run_simple_api_call(status_text, api_func)
 
     def _create_instance_input(self, root):
@@ -329,7 +329,7 @@ class App(QtWidgets.QWidget):
             # Parse the settings JSON (API often returns a JSON string)
             raw = payload.get("result", {})
             try:
-                settings_dict = self._parse_json_cached(raw) if isinstance(raw, str) else raw
+                settings_dict = json.loads(raw) if isinstance(raw, str) else raw
             except Exception:
                 settings_dict = {}
 
@@ -366,7 +366,7 @@ class App(QtWidgets.QWidget):
                 result = payload.get("result")
 
                 try:
-                    data = self._parse_json_cached(result) if isinstance(result, str) else result
+                    data = json.loads(result) if isinstance(result, str) else result
                 except Exception:
                     data = None
 
