@@ -3,6 +3,7 @@ import json
 import traceback
 import os
 import sys
+from datetime import datetime
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.resources import resource_path
 from app.update import get_update_manager, get_current_version
@@ -409,9 +410,36 @@ class App(QtWidgets.QWidget):
         root.addWidget(self.progress_bar)
 
     def _create_output_area(self, root):
+        # Create output container with toolbar
+        output_container = QtWidgets.QVBoxLayout()
+        
+        # Create toolbar with Clear and Copy buttons
+        toolbar = QtWidgets.QHBoxLayout()
+        toolbar.addWidget(QtWidgets.QLabel("Output:"))
+        toolbar.addStretch()
+        
+        # Clear button
+        clear_btn = QtWidgets.QPushButton("Clear")
+        clear_btn.setToolTip("Clear output area")
+        clear_btn.clicked.connect(self._clear_output)
+        clear_btn.setMaximumWidth(80)
+        toolbar.addWidget(clear_btn)
+        
+        # Copy button
+        copy_btn = QtWidgets.QPushButton("Copy")
+        copy_btn.setToolTip("Copy output to clipboard")
+        copy_btn.clicked.connect(self._copy_output)
+        copy_btn.setMaximumWidth(80)
+        toolbar.addWidget(copy_btn)
+        
+        output_container.addLayout(toolbar)
+        
+        # Create output text area
         self.output = QtWidgets.QTextEdit()
         self.output.setReadOnly(True)
-        root.addWidget(self.output)
+        output_container.addWidget(self.output)
+        
+        root.addLayout(output_container)
 
     # Worker handlers
 
@@ -657,17 +685,55 @@ class App(QtWidgets.QWidget):
 
     # Helpers
 
-    def _pretty_print(self, value) -> str:
+    def _clear_output(self):
+        """Clear the output area."""
+        self.output.clear()
+
+    def _copy_output(self):
+        """Copy output area content to clipboard."""
+        clipboard = QtWidgets.QApplication.clipboard()
+        clipboard.setText(self.output.toPlainText())
+        
+        # Show brief confirmation in status
+        original_text = self.status_label.text()
+        original_style = self.status_label.styleSheet()
+        self.status_label.setText("Copied to clipboard")
+        self.status_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
+        QtCore.QTimer.singleShot(1000, lambda: (
+            self.status_label.setText(original_text),
+            self.status_label.setStyleSheet(original_style)
+        ))
+
+    def _pretty_print(self, value, add_timestamp=True) -> str:
+        """Format value as pretty-printed JSON with optional timestamp.
+        
+        Args:
+            value: The value to format (dict, list, str, bytes, or other)
+            add_timestamp: If True, prepends timestamp to the output
+            
+        Returns:
+            Formatted string representation
+        """
+        formatted = ""
         try:
             if isinstance(value, (dict, list)):
-                return json.dumps(value, indent=2, ensure_ascii=False)
-            if isinstance(value, (bytes, bytearray)):
+                formatted = json.dumps(value, indent=2, ensure_ascii=False)
+            elif isinstance(value, (bytes, bytearray)):
                 value = value.decode("utf-8", errors="replace")
-            if isinstance(value, str):
-                return json.dumps(json.loads(value), indent=2, ensure_ascii=False)
+                formatted = json.dumps(json.loads(value), indent=2, ensure_ascii=False)
+            elif isinstance(value, str):
+                formatted = json.dumps(json.loads(value), indent=2, ensure_ascii=False)
+            else:
+                formatted = str(value)
         except Exception:
-            pass
-        return str(value)
+            formatted = str(value)
+        
+        # Add timestamp prefix if requested
+        if add_timestamp:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            formatted = f"[{timestamp}]\n{formatted}"
+        
+        return formatted
 
     def _get_instance_id_or_warn(self) -> str | None:
         """Get the instance ID from the input field, or show a warning if empty/invalid.
