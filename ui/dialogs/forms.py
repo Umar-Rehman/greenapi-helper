@@ -720,10 +720,18 @@ def ask_disappearing_chat(parent: QWidget, *, instance_type: str = "whatsapp"):
     if expiration not in [0, 86400, 604800, 7776000]:
         from PySide6.QtWidgets import QMessageBox
 
+        message_text = (
+            "Common values are:\n"
+            "0 = Off\n"
+            "86400 = 1 day\n"
+            "604800 = 7 days\n"
+            "7776000 = 90 days\n\n"
+            f"You entered: {expiration}\nContinue?"
+        )
         reply = QMessageBox.question(
             parent,
             "Confirm Value",
-            f"Common values are:\n0 = Off\n86400 = 1 day\n604800 = 7 days\n7776000 = 90 days\n\nYou entered: {expiration}\nContinue?",
+            message_text,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
@@ -822,7 +830,7 @@ def ask_send_file_by_url(parent: QWidget, *, instance_type: str = "whatsapp"):
         "e.g. 10000000 or -10000000000000" if is_max else "e.g. 79001234568@c.us or 120363123456789012@g.us"
     )
 
-    dlg = FormDialog(
+    return FormDialog(
         "Send File by URL",
         fields=[
             TextField(
