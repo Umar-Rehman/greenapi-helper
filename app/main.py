@@ -7,9 +7,11 @@ from datetime import datetime
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.resources import resource_path
 from app.update import get_update_manager, get_current_version
+from app.tab_config import TAB_CONFIG
 from ui.dialogs import forms, instance_settings, qr
 from ui.dialogs.cert_selector import CertificateSelectorDialog
 from ui.dialogs.kibana_login import KibanaLoginDialog
+from ui.dialogs.app_settings import AppSettingsDialog
 from greenapi.elk_auth import get_api_token, get_kibana_session_cookie_with_password
 from greenapi.api_url_resolver import resolve_api_url
 from greenapi.credentials import get_credential_manager
@@ -50,12 +52,28 @@ class App(QtWidgets.QWidget):
         self._ctx_ttl_seconds = 10 * 60
         self._last_chat_id = None
 
+        # Initialize settings for persistence
+        self.settings = QtCore.QSettings("GreenAPI", "Helper")
+
+        # Set minimum window size to accommodate tabs better
+        self.setMinimumSize(1200, 700)
+
+        # Restore window size or set default
+        saved_size = self.settings.value("window_size")
+        if saved_size:
+            self.resize(saved_size)
+        else:
+            self.resize(1400, 800)
+
         # Initialize update manager
         self.update_manager = get_update_manager()
         self.update_manager.update_available.connect(self._on_update_available)
         self.update_manager.update_error.connect(self._on_update_error)
 
         self._setup_ui()
+
+        # Restore last used instance ID
+        self._restore_last_instance()
 
         # Check for updates after UI is set up
         QtCore.QTimer.singleShot(1000, self.update_manager.check_for_updates)  # Check after 1 second
@@ -155,13 +173,56 @@ class App(QtWidgets.QWidget):
             "run_get_contacts": ("Fetching Contacts...", ga.get_contacts, False),
         }
 
-        root = QtWidgets.QVBoxLayout()
-        self._create_instance_input(root)
-        self._create_reauthenticate_button(root)
-        self._create_tabs(root)
-        self._create_progress_area(root)
-        self._create_output_area(root)
-        self.setLayout(root)
+        # Main layout
+        main_layout = QtWidgets.QVBoxLayout()
+
+        # Create horizontal splitter for left (controls) and right (output)
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+
+        # Left side - controls
+        left_widget = QtWidgets.QWidget()
+        left_layout = QtWidgets.QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._create_instance_toolbar(left_layout)
+        self._create_tabs(left_layout)
+        self._create_history_panel(left_layout)
+
+        # Right side - output area
+        right_widget = QtWidgets.QWidget()
+        right_layout = QtWidgets.QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._create_progress_area(right_layout)
+        self._create_output_area(right_layout)
+
+        # Add widgets to splitter
+        splitter.addWidget(left_widget)
+        splitter.addWidget(right_widget)
+
+        # Set minimum widths to prevent collapsing
+        left_widget.setMinimumWidth(300)
+        right_widget.setMinimumWidth(200)
+
+        # Set initial sizes (give left side enough room to show all tabs without scroll buttons)
+        # Left side: ~900px to fit all 9 tabs comfortably, Right side: ~500px for output
+        splitter.setSizes([1070, 330])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+
+        # Make splitter handle more visible and easier to grab
+        splitter.setHandleWidth(4)
+
+        # Restore splitter position if saved
+        saved_splitter = self.settings.value("splitter_sizes")
+        if saved_splitter:
+            splitter.restoreState(saved_splitter)
+
+        # Save splitter state when changed
+        splitter.splitterMoved.connect(lambda: self.settings.setValue("splitter_sizes", splitter.saveState()))
+
+        main_layout.addWidget(splitter)
+        self.setLayout(main_layout)
 
     def _run_mapped_api_call(self, method_name: str):
         """Generic handler for API calls using the mapping.
@@ -178,10 +239,83 @@ class App(QtWidgets.QWidget):
         # The needs_auth flag is kept in mapping for documentation purposes
         self._run_simple_api_call(status_text, api_func)
 
+    def _create_instance_toolbar(self, root):
+        """Create horizontal toolbar with instance input, type indicator, and action buttons."""
+        toolbar_layout = QtWidgets.QHBoxLayout()
+
+        # Instance ID label and input
+        toolbar_layout.addWidget(QtWidgets.QLabel("Instance ID:"))
+
+        # Create editable combo box for instance ID with history
+        self.instance_input = QtWidgets.QComboBox()
+        self.instance_input.setEditable(True)
+        self.instance_input.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+        self.instance_input.setFixedWidth(180)
+        self.instance_input.lineEdit().setPlaceholderText("Enter instance ID...")
+
+        # Load instance history from settings
+        self._load_instance_history()
+
+        # Connect signal to detect instance type when text changes
+        self.instance_input.currentTextChanged.connect(self._update_instance_type_indicator)
+
+        toolbar_layout.addWidget(self.instance_input)
+
+        # Add instance type indicator label (will show logo images)
+        self.instance_type_label = QtWidgets.QLabel("")
+        self.instance_type_label.setScaledContents(False)
+        self.instance_type_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.instance_type_label.setFixedWidth(100)
+        self.instance_type_label.setMaximumHeight(30)
+        toolbar_layout.addWidget(self.instance_type_label)
+
+        # Re-authenticate button
+        reauth_btn = QtWidgets.QPushButton("Re-authenticate")
+        reauth_btn.clicked.connect(self._reauthenticate_kibana)
+        reauth_btn.setToolTip("Clear all credentials and allow certificate re-selection")
+        reauth_btn.setFixedWidth(130)
+        toolbar_layout.addWidget(reauth_btn)
+
+        # Settings button
+        settings_btn = QtWidgets.QPushButton("Settings")
+        settings_btn.clicked.connect(self._open_settings)
+        settings_btn.setToolTip("Application settings and preferences")
+        settings_btn.setFixedWidth(90)
+        toolbar_layout.addWidget(settings_btn)
+
+        toolbar_layout.addStretch()
+
+        root.addLayout(toolbar_layout)
+
     def _create_instance_input(self, root):
-        root.addWidget(QtWidgets.QLabel("Instance ID:"))
-        self.instance_input = QtWidgets.QLineEdit()
-        root.addWidget(self.instance_input)
+        # Create horizontal layout for instance ID with type indicator
+        instance_layout = QtWidgets.QHBoxLayout()
+        instance_layout.addWidget(QtWidgets.QLabel("Instance ID:"))
+
+        # Create editable combo box for instance ID with history
+        self.instance_input = QtWidgets.QComboBox()
+        self.instance_input.setEditable(True)
+        self.instance_input.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+        self.instance_input.setMinimumWidth(200)
+        self.instance_input.lineEdit().setPlaceholderText("Enter instance ID...")
+
+        # Load instance history from settings
+        self._load_instance_history()
+
+        # Connect signal to detect instance type when text changes
+        self.instance_input.currentTextChanged.connect(self._update_instance_type_indicator)
+
+        instance_layout.addWidget(self.instance_input, stretch=1)
+
+        # Add instance type indicator label (will show logo images)
+        self.instance_type_label = QtWidgets.QLabel("")
+        self.instance_type_label.setScaledContents(False)
+        self.instance_type_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.instance_type_label.setMinimumWidth(100)
+        self.instance_type_label.setMaximumHeight(30)
+        instance_layout.addWidget(self.instance_type_label)
+
+        root.addLayout(instance_layout)
 
     def _create_reauthenticate_button(self, root):
         reauth_btn = QtWidgets.QPushButton("Re-authenticate Kibana Session")
@@ -191,198 +325,96 @@ class App(QtWidgets.QWidget):
 
     def _create_tabs(self, root):
         tabs = QtWidgets.QTabWidget()
-        self._create_account_tab(tabs)
-        self._create_journals_tab(tabs)
-        self._create_queues_tab(tabs)
-        self._create_groups_tab(tabs)
-        self._create_sending_tab(tabs)
-        self._create_receiving_tab(tabs)
-        self._create_statuses_tab(tabs)
-        self._create_read_mark_tab(tabs)
-        self._create_service_methods_tab(tabs)
+        
+        # Create all tabs from configuration
+        for tab_name in TAB_CONFIG.keys():
+            self._create_tab_from_config(tabs, tab_name)
+
+        # Store reference for tab management
+        self.tabs = tabs
+
+        # Connect signal to save tab changes
+        tabs.currentChanged.connect(self._on_tab_changed)
+
+        # Restore last active tab or use default
+        remember_last_tab = self.settings.value("remember_last_tab", True, type=bool)
+        if remember_last_tab:
+            last_tab = self.settings.value("last_tab_index", 0, type=int)
+        else:
+            last_tab = self.settings.value("default_tab_index", 0, type=int)
+
+        if 0 <= last_tab < tabs.count():
+            tabs.setCurrentIndex(last_tab)
+
         root.addWidget(tabs)
 
-    def _create_account_tab(self, tabs):
-        account_tab = QtWidgets.QWidget()
-        account_layout = QtWidgets.QVBoxLayout(account_tab)
-        self.button = self._add_button(
-            account_layout,
-            "Get Instance Information (API Token / URL)",
-            self.run_get_api_token,
-        )
-        self.state_button = self._add_button(account_layout, "Get Instance State", self.run_get_instance_state)
-        self.settings_button = self._add_button(account_layout, "Get Instance Settings", self.run_get_instance_settings)
-        self.set_settings_button = self._add_button(
-            account_layout,
-            "Set Instance Settings",
-            self.run_set_instance_settings,
-            "post",
-        )
-        self.get_account_settings_button = self._add_button(
-            account_layout, "Get Account Settings", self.run_get_account_settings
-        )
-        self.get_qr_button = self._add_button(account_layout, "Get QR Code", self.run_get_qr_code)
-        self.get_auth_code_button = self._add_button(
-            account_layout, "Get Authorization Code", self.run_get_authorization_code
-        )
-        self.update_token_button = self._add_button(
-            account_layout, "Update API Token", self.run_update_api_token, "danger"
-        )
-        self.logout_button = self._add_button(account_layout, "Logout Instance", self.run_logout_instance, "danger")
-        self.reboot_button = self._add_button(account_layout, "Reboot Instance", self.run_reboot_instance, "danger")
-        account_layout.addStretch(1)
-        tabs.addTab(account_tab, "Account")
+    def _create_tab_from_config(self, tabs, tab_name):
+        """Create a tab dynamically from configuration.
+        
+        Args:
+            tabs: QTabWidget to add the tab to.
+            tab_name: Name of the tab from TAB_CONFIG.
+        """
+        tab_widget = QtWidgets.QWidget()
+        tab_layout = QtWidgets.QVBoxLayout(tab_widget)
+        
+        config = TAB_CONFIG[tab_name]
+        
+        for section in config["sections"]:
+            # Create section group box
+            group = QtWidgets.QGroupBox(section["title"])
+            group_layout = QtWidgets.QVBoxLayout()
+            
+            # Add buttons to the section
+            for button_config in section["buttons"]:
+                handler_name = button_config["handler"]
+                handler = getattr(self, handler_name)
+                action_type = button_config.get("action_type")
+                
+                self._add_button(
+                    group_layout,
+                    button_config["text"],
+                    handler,
+                    action_type
+                )
+            
+            group.setLayout(group_layout)
+            tab_layout.addWidget(group)
+        
+        tab_layout.addStretch(1)
+        tabs.addTab(tab_widget, tab_name)
 
-    def _create_journals_tab(self, tabs):
-        journals_tab = QtWidgets.QWidget()
-        journals_layout = QtWidgets.QVBoxLayout(journals_tab)
-        self.journal_button = self._add_button(
-            journals_layout,
-            "Get Incoming Messages Journal",
-            self.run_get_incoming_msgs_journal,
-        )
-        self.outgoing_journal_button = self._add_button(
-            journals_layout,
-            "Get Outgoing Messages Journal",
-            self.run_get_outgoing_msgs_journal,
-        )
-        self.chat_history_button = self._add_button(
-            journals_layout, "Get Chat History", self.run_get_chat_history, "post"
-        )
-        self.get_message_button = self._add_button(journals_layout, "Get Message", self.run_get_message, "post")
-        journals_layout.addStretch(1)
-        tabs.addTab(journals_tab, "Journals")
+    def _create_history_panel(self, root):
+        """Create request history panel at bottom of left side."""
+        # Create container
+        history_container = QtWidgets.QGroupBox("Request History")
+        history_layout = QtWidgets.QVBoxLayout(history_container)
 
-    def _create_queues_tab(self, tabs):
-        queue_tab = QtWidgets.QWidget()
-        queue_layout = QtWidgets.QVBoxLayout(queue_tab)
-        self.msg_count_button = self._add_button(queue_layout, "Get Message Queue Count", self.run_get_msg_queue_count)
-        self.msg_queue_button = self._add_button(queue_layout, "Get Messages Queued to Send", self.run_get_msg_queue)
-        self.clear_queue_button = self._add_button(
-            queue_layout,
-            "Clear Message Queue to Send",
-            self.run_clear_msg_queue,
-            "post",
-        )
-        self.webhook_count_button = self._add_button(queue_layout, "Get Webhook Count", self.run_get_webhook_count)
-        self.webhook_delete_button = self._add_button(
-            queue_layout, "Delete Incoming Webhooks", self.run_clear_webhooks, "danger"
-        )
-        queue_layout.addStretch(1)
-        tabs.addTab(queue_tab, "Queues")
+        # Toolbar with clear button
+        toolbar = QtWidgets.QHBoxLayout()
+        toolbar.addStretch()
 
-    def _create_groups_tab(self, tabs):
-        groups_tab = QtWidgets.QWidget()
-        groups_layout = QtWidgets.QVBoxLayout(groups_tab)
-        self.create_group_button = self._add_button(groups_layout, "Create Group", self.run_create_group, "post")
-        self.update_group_name_button = self._add_button(
-            groups_layout, "Update Group Name", self.run_update_group_name, "post"
-        )
-        self.get_group_data_button = self._add_button(groups_layout, "Get Group Data", self.run_get_group_data)
-        self.add_participant_button = self._add_button(
-            groups_layout, "Add Group Participant", self.run_add_group_participant, "post"
-        )
-        self.remove_participant_button = self._add_button(
-            groups_layout, "Remove Group Participant", self.run_remove_group_participant, "post"
-        )
-        self.set_admin_button = self._add_button(groups_layout, "Set Group Admin", self.run_set_group_admin, "post")
-        self.remove_admin_button = self._add_button(
-            groups_layout, "Remove Group Admin", self.run_remove_group_admin, "post"
-        )
-        self.leave_group_button = self._add_button(groups_layout, "Leave Group", self.run_leave_group, "danger")
-        self.update_group_settings_button = self._add_button(
-            groups_layout, "Update Group Settings", self.run_update_group_settings, "post"
-        )
-        groups_layout.addStretch(1)
-        tabs.addTab(groups_tab, "Groups")
+        clear_history_btn = QtWidgets.QPushButton("Clear")
+        clear_history_btn.setToolTip("Clear request history")
+        clear_history_btn.clicked.connect(self._clear_request_history)
+        clear_history_btn.setMaximumWidth(80)
+        toolbar.addWidget(clear_history_btn)
 
-    def _create_sending_tab(self, tabs):
-        sending_tab = QtWidgets.QWidget()
-        sending_layout = QtWidgets.QVBoxLayout(sending_tab)
-        self.send_message_button = self._add_button(sending_layout, "Send Text Message", self.run_send_message, "post")
-        self.send_file_url_button = self._add_button(
-            sending_layout, "Send File by URL", self.run_send_file_by_url, "post"
-        )
-        self.send_poll_button = self._add_button(sending_layout, "Send Poll", self.run_send_poll, "post")
-        self.send_location_button = self._add_button(sending_layout, "Send Location", self.run_send_location, "post")
-        self.send_contact_button = self._add_button(sending_layout, "Send Contact", self.run_send_contact, "post")
-        self.forward_messages_button = self._add_button(
-            sending_layout, "Forward Messages", self.run_forward_messages, "post"
-        )
-        sending_layout.addStretch(1)
-        tabs.addTab(sending_tab, "Sending")
+        history_layout.addLayout(toolbar)
 
-    def _create_receiving_tab(self, tabs):
-        receiving_tab = QtWidgets.QWidget()
-        receiving_layout = QtWidgets.QVBoxLayout(receiving_tab)
-        self.receive_notification_button = self._add_button(
-            receiving_layout, "Receive Notification", self.run_receive_notification
-        )
-        self.delete_notification_button = self._add_button(
-            receiving_layout, "Delete Notification", self.run_delete_notification, "danger"
-        )
-        self.download_file_button = self._add_button(
-            receiving_layout, "Download File from Message", self.run_download_file, "post"
-        )
-        receiving_layout.addStretch(1)
-        tabs.addTab(receiving_tab, "Receiving")
+        # History list
+        self.history_list = QtWidgets.QListWidget()
+        self.history_list.setMaximumHeight(150)
+        self.history_list.setAlternatingRowColors(True)
+        self.history_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.history_list.customContextMenuRequested.connect(self._show_history_context_menu)
+        history_layout.addWidget(self.history_list)
 
-    def _create_statuses_tab(self, tabs):
-        status_tab = QtWidgets.QWidget()
-        status_layout = QtWidgets.QVBoxLayout(status_tab)
-        self.send_text_status_button = self._add_button(
-            status_layout, "Send Text Status", self.run_send_text_status, "post"
-        )
-        self.send_voice_status_button = self._add_button(
-            status_layout, "Send Voice Status", self.run_send_voice_status, "post"
-        )
-        self.send_media_status_button = self._add_button(
-            status_layout, "Send Media Status", self.run_send_media_status, "post"
-        )
-        self.delete_status_button = self._add_button(status_layout, "Delete Status", self.run_delete_status, "danger")
-        self.incoming_status_button = self._add_button(
-            status_layout, "Get Incoming Statuses", self.run_get_incoming_statuses
-        )
-        self.outgoing_status_button = self._add_button(
-            status_layout, "Get Outgoing Statuses", self.run_get_outgoing_statuses
-        )
-        self.status_stat_button = self._add_button(status_layout, "Get Status Statistic", self.run_get_status_statistic)
-        status_layout.addStretch(1)
-        tabs.addTab(status_tab, "Statuses")
+        # Initialize history storage
+        self.request_history = []
+        self._load_request_history()
 
-    def _create_service_methods_tab(self, tabs):
-        service_tab = QtWidgets.QWidget()
-        service_layout = QtWidgets.QVBoxLayout(service_tab)
-        self.get_contacts_button = self._add_button(service_layout, "Get Contacts", self.run_get_contacts)
-        self.check_whatsapp_button = self._add_button(
-            service_layout, "Check Whatsapp Availability", self.run_check_whatsapp
-        )
-        self.check_max_button = self._add_button(service_layout, "Check MAX Availability", self.run_check_max)
-        self.get_contact_info_button = self._add_button(service_layout, "Get Contact Info", self.run_get_contact_info)
-        self.get_avatar_button = self._add_button(service_layout, "Get Avatar", self.run_get_avatar)
-        self.edit_message_button = self._add_button(service_layout, "Edit Message", self.run_edit_message, "post")
-        self.delete_message_button = self._add_button(
-            service_layout, "Delete Message", self.run_delete_message, "danger"
-        )
-        self.archive_chat_button = self._add_button(service_layout, "Archive Chat", self.run_archive_chat, "post")
-        self.unarchive_chat_button = self._add_button(service_layout, "Unarchive Chat", self.run_unarchive_chat, "post")
-        self.disappearing_chat_button = self._add_button(
-            service_layout, "Set Disappearing Messages", self.run_set_disappearing_chat, "post"
-        )
-        service_layout.addStretch(1)
-        tabs.addTab(service_tab, "Service Methods")
-
-    def _create_read_mark_tab(self, tabs):
-        read_mark_tab = QtWidgets.QWidget()
-        read_mark_layout = QtWidgets.QVBoxLayout(read_mark_tab)
-        self.mark_message_read_button = self._add_button(
-            read_mark_layout, "Mark Message as Read", self.run_mark_message_as_read, "post"
-        )
-        self.mark_chat_read_button = self._add_button(
-            read_mark_layout, "Mark Chat as Read", self.run_mark_chat_as_read, "post"
-        )
-        read_mark_layout.addStretch(1)
-        tabs.addTab(read_mark_tab, "Read Mark")
+        root.addWidget(history_container)
 
     def _create_progress_area(self, root):
         """Create the progress bar area for showing loading states."""
@@ -412,33 +444,88 @@ class App(QtWidgets.QWidget):
     def _create_output_area(self, root):
         # Create output container with toolbar
         output_container = QtWidgets.QVBoxLayout()
-        
-        # Create toolbar with Clear and Copy buttons
+
+        # Create toolbar with Clear, Copy, and Export buttons
         toolbar = QtWidgets.QHBoxLayout()
         toolbar.addWidget(QtWidgets.QLabel("Output:"))
         toolbar.addStretch()
-        
+
         # Clear button
         clear_btn = QtWidgets.QPushButton("Clear")
         clear_btn.setToolTip("Clear output area")
         clear_btn.clicked.connect(self._clear_output)
         clear_btn.setMaximumWidth(80)
         toolbar.addWidget(clear_btn)
-        
+
         # Copy button
         copy_btn = QtWidgets.QPushButton("Copy")
         copy_btn.setToolTip("Copy output to clipboard")
         copy_btn.clicked.connect(self._copy_output)
         copy_btn.setMaximumWidth(80)
         toolbar.addWidget(copy_btn)
-        
+
+        # Export button
+        export_btn = QtWidgets.QPushButton("Export")
+        export_btn.setToolTip("Export output to file")
+        export_btn.clicked.connect(self._export_output)
+        export_btn.setMaximumWidth(80)
+        toolbar.addWidget(export_btn)
+
         output_container.addLayout(toolbar)
-        
+
+        # Create search bar
+        search_bar = QtWidgets.QHBoxLayout()
+        search_bar.addWidget(QtWidgets.QLabel("Find:"))
+
+        self.search_field = QtWidgets.QLineEdit()
+        self.search_field.setPlaceholderText("Search in output...")
+        self.search_field.textChanged.connect(self._on_search_text_changed)
+        self.search_field.returnPressed.connect(self._find_next)
+        search_bar.addWidget(self.search_field)
+
+        # Match count label
+        self.match_count_label = QtWidgets.QLabel("")
+        self.match_count_label.setMinimumWidth(80)
+        search_bar.addWidget(self.match_count_label)
+
+        # Previous button
+        prev_btn = QtWidgets.QPushButton("◀ Prev")
+        prev_btn.setToolTip("Previous match")
+        prev_btn.clicked.connect(self._find_previous)
+        prev_btn.setMaximumWidth(80)
+        search_bar.addWidget(prev_btn)
+
+        # Next button
+        next_btn = QtWidgets.QPushButton("Next ▶")
+        next_btn.setToolTip("Next match")
+        next_btn.clicked.connect(self._find_next)
+        next_btn.setMaximumWidth(80)
+        search_bar.addWidget(next_btn)
+
+        output_container.addLayout(search_bar)
+
         # Create output text area
         self.output = QtWidgets.QTextEdit()
         self.output.setReadOnly(True)
+
+        # Apply saved output settings
+        word_wrap = self.settings.value("word_wrap_output", True, type=bool)
+        if word_wrap:
+            self.output.setLineWrapMode(QtWidgets.QTextEdit.WidgetWidth)
+        else:
+            self.output.setLineWrapMode(QtWidgets.QTextEdit.NoWrap)
+
+        font_size = self.settings.value("output_font_size", 10, type=int)
+        font = self.output.font()
+        font.setPointSize(font_size)
+        self.output.setFont(font)
+
+        # Initialize search tracking
+        self.search_matches = []
+        self.current_match_index = -1
+
         output_container.addWidget(self.output)
-        
+
         root.addLayout(output_container)
 
     # Worker handlers
@@ -452,8 +539,22 @@ class App(QtWidgets.QWidget):
         # Schedule status reset after a short delay
         QtCore.QTimer.singleShot(2000, lambda: self._reset_status_label())
 
+        # Capture output for history
+        output_text = ""
         if not (isinstance(payload, dict) and "ctx" in payload):
-            self.output.setPlainText(self._pretty_print(payload))
+            output_text = self._pretty_print(payload)
+            self.output.setPlainText(output_text)
+
+        # Add to history with output
+        if worker and hasattr(worker, "_operation_name"):
+            self._add_to_history(
+                method_name=worker._operation_name,
+                instance_id=getattr(worker, "_instance_id", ""),
+                success=True,
+                output=output_text or self._pretty_print(payload),
+            )
+
+        if not (isinstance(payload, dict) and "ctx" in payload):
             return
 
         self._ctx = payload["ctx"]
@@ -622,6 +723,16 @@ class App(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(3000, self._hide_progress)
 
         user_friendly_error = self._handle_api_error(err)
+
+        # Add to history as failed with error output
+        if worker and hasattr(worker, "_operation_name"):
+            self._add_to_history(
+                method_name=worker._operation_name,
+                instance_id=getattr(worker, "_instance_id", ""),
+                success=False,
+                output=user_friendly_error,
+            )
+
         self.output.setPlainText(user_friendly_error)
 
     @QtCore.Slot()
@@ -661,6 +772,14 @@ class App(QtWidgets.QWidget):
         # Create worker and run in thread pool
         worker = Worker(fn)
 
+        # Store operation context for history tracking
+        # Use button text if available, otherwise use status text
+        if btn is not None and hasattr(btn, "text"):
+            worker._operation_name = btn.text()
+        else:
+            worker._operation_name = status_text
+        worker._instance_id = self.instance_input.currentText() if hasattr(self, "instance_input") else ""
+
         def on_result(result):
             self._on_worker_result(result, worker, btn)
 
@@ -685,32 +804,512 @@ class App(QtWidgets.QWidget):
 
     # Helpers
 
+    def _load_instance_history(self):
+        """Load instance ID history from settings."""
+        history = self.settings.value("instance_history", [])
+        if not isinstance(history, list):
+            history = []
+
+        # Add items to combo box (most recent first)
+        for instance_id in history[:10]:  # Limit to 10 most recent
+            self.instance_input.addItem(str(instance_id))
+
+    def _save_instance_to_history(self, instance_id: str):
+        """Save instance ID to history.
+
+        Args:
+            instance_id: The instance ID to save
+        """
+        if not instance_id:
+            return
+
+        # Get current history
+        history = self.settings.value("instance_history", [])
+        if not isinstance(history, list):
+            history = []
+
+        # Remove if already exists (to move to top)
+        if instance_id in history:
+            history.remove(instance_id)
+
+        # Add to beginning
+        history.insert(0, instance_id)
+
+        # Keep only last 10
+        history = history[:10]
+
+        # Save back to settings
+        self.settings.setValue("instance_history", history)
+
+        # Update combo box
+        current_text = self.instance_input.currentText()
+        self.instance_input.clear()
+        self._load_instance_history()
+        self.instance_input.setCurrentText(current_text)
+
+    def _restore_last_instance(self):
+        """Restore the last used instance ID."""
+        last_instance = self.settings.value("last_instance_id", "")
+        if last_instance:
+            self.instance_input.setCurrentText(last_instance)
+            self._update_instance_type_indicator(last_instance)
+
+    def _update_instance_type_indicator(self, instance_id: str):
+        """Update the instance type indicator label.
+
+        Args:
+            instance_id: The instance ID to check
+        """
+        if not instance_id or not instance_id.strip():
+            self.instance_type_label.clear()
+            self.instance_type_label.setPixmap(QtGui.QPixmap())
+            self.instance_type_label.setStyleSheet("")
+            return
+
+        # Keep transparent until at least 10 digits entered
+        if len(instance_id) < 10 or not instance_id.isdigit():
+            self.instance_type_label.clear()
+            self.instance_type_label.setPixmap(QtGui.QPixmap())
+            self.instance_type_label.setStyleSheet("")
+            return
+
+        # Validate it's exactly 10 digits
+        if len(instance_id) != 10:
+            self.instance_type_label.setPixmap(QtGui.QPixmap())  # Clear any pixmap
+            self.instance_type_label.setText("Invalid")
+            self.instance_type_label.setStyleSheet(
+                "font-weight: bold; padding: 2px 8px; " "background-color: #FF9800; color: white; border-radius: 3px;"
+            )
+            return
+
+        # Extract pool prefix (first 2 digits)
+        pool_prefix = instance_id[:2]
+
+        # Known MAX prefixes (from api_url_resolver - those with /v3 path)
+        max_prefixes = ("31", "35")
+
+        # Known WhatsApp prefixes (from api_url_resolver - RULES_EXACT and RULES_PREFIX)
+        whatsapp_prefixes = ("11", "22", "33", "55", "57", "71", "77", "99")
+
+        if pool_prefix in max_prefixes:
+            # MAX instance - show logo
+            pixmap = QtGui.QPixmap(resource_path("ui/Max_logo.png"))
+            if not pixmap.isNull():
+                # Scale to fit height while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaledToHeight(28, QtCore.Qt.SmoothTransformation)
+                self.instance_type_label.setPixmap(scaled_pixmap)
+                self.instance_type_label.setStyleSheet(
+                    "padding: 2px 8px; " "background-color: #2196F3; border-radius: 3px;"
+                )
+            else:
+                self.instance_type_label.setText("MAX")
+                self.instance_type_label.setStyleSheet(
+                    "font-weight: bold; padding: 2px 8px; "
+                    "background-color: #2196F3; color: white; border-radius: 3px;"
+                )
+        elif pool_prefix in whatsapp_prefixes:
+            # WhatsApp instance - show logo
+            pixmap = QtGui.QPixmap(resource_path("ui/WhatsApp_logo.png"))
+            if not pixmap.isNull():
+                # Scale to fit height while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaledToHeight(28, QtCore.Qt.SmoothTransformation)
+                self.instance_type_label.setPixmap(scaled_pixmap)
+                self.instance_type_label.setStyleSheet(
+                    "padding: 2px 8px; " "background-color: #25D366; border-radius: 3px;"
+                )
+            else:
+                self.instance_type_label.setText("WhatsApp")
+                self.instance_type_label.setStyleSheet(
+                    "font-weight: bold; padding: 2px 8px; "
+                    "background-color: #25D366; color: white; border-radius: 3px;"
+                )
+        else:
+            # Unknown prefix
+            self.instance_type_label.setPixmap(QtGui.QPixmap())  # Clear any pixmap
+            self.instance_type_label.setText("Unknown")
+            self.instance_type_label.setStyleSheet(
+                "font-weight: bold; padding: 2px 8px; " "background-color: #9E9E9E; color: white; border-radius: 3px;"
+            )
+
     def _clear_output(self):
         """Clear the output area."""
         self.output.clear()
+        self._clear_search_highlights()
+
+    def _set_output(self, text: str):
+        """Set output text and auto-scroll if enabled in settings."""
+        self.output.setPlainText(text)
+
+        # Auto-scroll to bottom if enabled
+        auto_scroll = self.settings.value("auto_scroll_output", True, type=bool)
+        if auto_scroll:
+            scrollbar = self.output.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+
+        # Re-apply search if there's active search text
+        if hasattr(self, "search_field") and self.search_field.text():
+            self._on_search_text_changed()
+
+    def _on_search_text_changed(self):
+        """Handle search text changes - highlight all matches."""
+        search_text = self.search_field.text()
+
+        # Clear previous highlights
+        self._clear_search_highlights()
+
+        if not search_text:
+            self.match_count_label.setText("")
+            return
+
+        # Get search flags (case insensitive by default)
+        flags = QtGui.QTextDocument.FindFlags()
+
+        # Find all matches and highlight them
+        cursor = self.output.textCursor()
+        cursor.setPosition(0)
+        self.output.setTextCursor(cursor)
+
+        self.search_matches = []
+        match_format = QtGui.QTextCharFormat()
+        match_format.setBackground(QtGui.QColor("#FFEB3B"))  # Yellow highlight
+
+        # Search for all occurrences
+        while True:
+            cursor = self.output.document().find(search_text, cursor, flags)
+            if cursor.isNull():
+                break
+
+            self.search_matches.append(cursor.position())
+
+            # Apply highlight
+            extra_selection = QtWidgets.QTextEdit.ExtraSelection()
+            extra_selection.cursor = cursor
+            extra_selection.format = match_format
+            self.output.setExtraSelections(self.output.extraSelections() + [extra_selection])
+
+        # Update match count
+        if self.search_matches:
+            self.current_match_index = 0
+            self.match_count_label.setText(f"1 of {len(self.search_matches)}")
+            self._highlight_current_match()
+        else:
+            self.current_match_index = -1
+            self.match_count_label.setText("No matches")
+
+    def _find_next(self):
+        """Move to next search match."""
+        if not self.search_matches:
+            return
+
+        self.current_match_index = (self.current_match_index + 1) % len(self.search_matches)
+        self.match_count_label.setText(f"{self.current_match_index + 1} of {len(self.search_matches)}")
+        self._highlight_current_match()
+
+    def _find_previous(self):
+        """Move to previous search match."""
+        if not self.search_matches:
+            return
+
+        self.current_match_index = (self.current_match_index - 1) % len(self.search_matches)
+        self.match_count_label.setText(f"{self.current_match_index + 1} of {len(self.search_matches)}")
+        self._highlight_current_match()
+
+    def _highlight_current_match(self):
+        """Highlight the current match with a different color and scroll to it."""
+        if self.current_match_index < 0 or self.current_match_index >= len(self.search_matches):
+            return
+
+        # Re-highlight all matches
+        search_text = self.search_field.text()
+        flags = QtGui.QTextDocument.FindFlags()
+
+        selections = []
+        cursor = self.output.textCursor()
+        cursor.setPosition(0)
+
+        match_index = 0
+        while True:
+            cursor = self.output.document().find(search_text, cursor, flags)
+            if cursor.isNull():
+                break
+
+            extra_selection = QtWidgets.QTextEdit.ExtraSelection()
+            extra_selection.cursor = cursor
+
+            # Current match gets orange highlight, others get yellow
+            if match_index == self.current_match_index:
+                extra_selection.format.setBackground(QtGui.QColor("#FF9800"))  # Orange
+                # Scroll to this match
+                self.output.setTextCursor(cursor)
+                self.output.ensureCursorVisible()
+            else:
+                extra_selection.format.setBackground(QtGui.QColor("#FFEB3B"))  # Yellow
+
+            selections.append(extra_selection)
+            match_index += 1
+
+        self.output.setExtraSelections(selections)
+
+    def _clear_search_highlights(self):
+        """Clear all search highlights."""
+        self.output.setExtraSelections([])
+        self.search_matches = []
+        self.current_match_index = -1
+        if hasattr(self, "match_count_label"):
+            self.match_count_label.setText("")
+
+    def _load_request_history(self):
+        """Load request history from settings."""
+        history = self.settings.value("request_history", [])
+        if not isinstance(history, list):
+            history = []
+
+        self.request_history = history[-50:]  # Keep last 50
+        self._update_history_display()
+
+    def _save_request_history(self):
+        """Save request history to settings."""
+        self.settings.setValue("request_history", self.request_history[-50:])
+
+    def _add_to_history(
+        self, method_name: str, instance_id: str, success: bool, params: dict = None, output: str = None
+    ):
+        """Add a request to history."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        status_icon = "✓" if success else "✗"
+
+        # Create display text
+        display_text = f"{status_icon} {timestamp} | {method_name}"
+        if instance_id:
+            display_text += f" | {instance_id}"
+
+        # Store full details including output
+        history_entry = {
+            "timestamp": timestamp,
+            "method": method_name,
+            "instance_id": instance_id,
+            "success": success,
+            "params": params or {},
+            "output": output or "",
+        }
+
+        self.request_history.append(history_entry)
+
+        # Keep only last 50
+        if len(self.request_history) > 50:
+            self.request_history = self.request_history[-50:]
+
+        self._save_request_history()
+        self._update_history_display()
+
+    def _update_history_display(self):
+        """Update the history list widget."""
+        self.history_list.clear()
+
+        # Add items in reverse order (newest first)
+        for entry in reversed(self.request_history):
+            timestamp = entry.get("timestamp", "")
+            method = entry.get("method", "Unknown")
+            instance_id = entry.get("instance_id", "")
+            success = entry.get("success", False)
+
+            status_icon = "✓" if success else "✗"
+            display_text = f"{status_icon} {timestamp} | {method}"
+            if instance_id:
+                display_text += f" | {instance_id}"
+
+            item = QtWidgets.QListWidgetItem(display_text)
+
+            # Color code by status
+            if success:
+                item.setForeground(QtGui.QColor("#4CAF50"))  # Green
+            else:
+                item.setForeground(QtGui.QColor("#F44336"))  # Red
+
+            # Store full entry data
+            item.setData(QtCore.Qt.UserRole, entry)
+
+            self.history_list.addItem(item)
+
+    def _show_history_context_menu(self, position):
+        """Show context menu for history items."""
+        item = self.history_list.itemAt(position)
+        if not item:
+            return
+
+        entry = item.data(QtCore.Qt.UserRole)
+        if not entry:
+            return
+
+        menu = QtWidgets.QMenu(self)
+
+        # Add hover effect styling
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                border: 1px solid #ccc;
+            }
+            QMenu::item {
+                padding: 5px 25px 5px 10px;
+                border: 1px solid transparent;
+            }
+            QMenu::item:selected {
+                background-color: #0078d4;
+                color: white;
+            }
+            QMenu::item:hover {
+                background-color: #0078d4;
+                color: white;
+            }
+        """)
+
+        # View output action
+        view_action = menu.addAction("🔍 View Output")
+        view_action.triggered.connect(lambda: self._view_history_output(entry))
+
+        # Re-run action
+        rerun_action = menu.addAction("⟳ Re-run Request")
+        rerun_action.triggered.connect(lambda: self._rerun_from_history(entry))
+
+        menu.addSeparator()
+
+        # Delete action
+        delete_action = menu.addAction("🗑 Delete")
+        delete_action.triggered.connect(lambda: self._delete_history_item(item, entry))
+
+        menu.exec(self.history_list.mapToGlobal(position))
+
+    def _view_history_output(self, entry: dict):
+        """View the output from a history entry."""
+        output = entry.get("output", "")
+        if output:
+            self.output.setPlainText(output)
+            self.status_label.setText(f"Viewing: {entry.get('method', 'Unknown')}")
+        else:
+            self.status_label.setText("No output available for this request")
+
+    def _rerun_from_history(self, entry: dict):
+        """Re-run a request from history."""
+        method = entry.get("method", "")
+        instance_id = entry.get("instance_id", "")
+
+        # Set instance ID if available
+        if instance_id and hasattr(self, "instance_input"):
+            self.instance_input.setCurrentText(instance_id)
+
+        # Ensure authentication before re-running
+        if not self._ensure_authentication():
+            self.status_label.setText("Authentication required to re-run request")
+            return
+
+        # Try to call the method directly if it exists
+        if hasattr(self, method) and callable(getattr(self, method)):
+            self.status_label.setText(f"Re-running: {method}")
+            try:
+                getattr(self, method)()
+            except Exception as e:
+                self.output.setPlainText(f"Error re-running {method}: {str(e)}")
+            return
+
+        # If no exact match, try finding by partial button text match
+        for method_key in dir(self):
+            if method_key.startswith("run_"):
+                # Convert method key to readable text (e.g., "run_get_qr_code" -> "Get QR Code")
+                readable_name = method_key.replace("run_", "").replace("_", " ").title()
+                if readable_name.lower() in method.lower() or method.lower() in readable_name.lower():
+                    self.status_label.setText(f"Re-running: {method}")
+                    try:
+                        getattr(self, method_key)()
+                    except Exception as e:
+                        self.output.setPlainText(f"Error re-running {method_key}: {str(e)}")
+                    return
+
+        self.status_label.setText(f"Cannot find matching method for: {method}")
+
+    def _delete_history_item(self, item: QtWidgets.QListWidgetItem, entry: dict):
+        """Delete a single history item."""
+        # Remove from list widget
+        row = self.history_list.row(item)
+        self.history_list.takeItem(row)
+
+        # Remove from history data
+        if entry in self.request_history:
+            self.request_history.remove(entry)
+            self._save_request_history()
+
+    def _clear_request_history(self):
+        """Clear all request history."""
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Clear History",
+            "Clear all request history?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+
+        if reply == QtWidgets.QMessageBox.Yes:
+            self.request_history = []
+            self._save_request_history()
+            self._update_history_display()
+            self.status_label.setText("History cleared")
 
     def _copy_output(self):
         """Copy output area content to clipboard."""
         clipboard = QtWidgets.QApplication.clipboard()
         clipboard.setText(self.output.toPlainText())
-        
+
         # Show brief confirmation in status
         original_text = self.status_label.text()
         original_style = self.status_label.styleSheet()
         self.status_label.setText("Copied to clipboard")
         self.status_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
-        QtCore.QTimer.singleShot(1000, lambda: (
-            self.status_label.setText(original_text),
-            self.status_label.setStyleSheet(original_style)
-        ))
+        QtCore.QTimer.singleShot(
+            1000, lambda: (self.status_label.setText(original_text), self.status_label.setStyleSheet(original_style))
+        )
+
+    def _export_output(self):
+        """Export output area content to a file."""
+        content = self.output.toPlainText()
+
+        if not content.strip():
+            self.status_label.setText("No output to export")
+            self.status_label.setStyleSheet("font-weight: bold; color: #FF9800;")
+            QtCore.QTimer.singleShot(2000, lambda: self._reset_status_label())
+            return
+
+        # Open file dialog
+        file_path, selected_filter = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export Output", "", "JSON Files (*.json);;Text Files (*.txt);;All Files (*.*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            # Show success confirmation
+            original_text = self.status_label.text()
+            original_style = self.status_label.styleSheet()
+            self.status_label.setText(f"Exported to {os.path.basename(file_path)}")
+            self.status_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
+            QtCore.QTimer.singleShot(
+                2000,
+                lambda: (self.status_label.setText(original_text), self.status_label.setStyleSheet(original_style)),
+            )
+        except Exception as e:
+            self.status_label.setText(f"Export failed: {str(e)}")
+            self.status_label.setStyleSheet("font-weight: bold; color: #F44336;")
+            QtCore.QTimer.singleShot(3000, lambda: self._reset_status_label())
 
     def _pretty_print(self, value, add_timestamp=True) -> str:
         """Format value as pretty-printed JSON with optional timestamp.
-        
+
         Args:
             value: The value to format (dict, list, str, bytes, or other)
-            add_timestamp: If True, prepends timestamp to the output
-            
+            add_timestamp: If True, prepends timestamp to the output (if enabled in settings)
+
         Returns:
             Formatted string representation
         """
@@ -727,12 +1326,13 @@ class App(QtWidgets.QWidget):
                 formatted = str(value)
         except Exception:
             formatted = str(value)
-        
-        # Add timestamp prefix if requested
-        if add_timestamp:
+
+        # Add timestamp prefix if requested and enabled in settings
+        show_timestamps = self.settings.value("show_timestamps", True, type=bool)
+        if add_timestamp and show_timestamps:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             formatted = f"[{timestamp}]\n{formatted}"
-        
+
         return formatted
 
     def _get_instance_id_or_warn(self) -> str | None:
@@ -741,7 +1341,7 @@ class App(QtWidgets.QWidget):
         Returns:
             The instance ID string if valid, None otherwise.
         """
-        instance_id = self.instance_input.text().strip()
+        instance_id = self.instance_input.currentText().strip()
         if not instance_id:
             self.output.setPlainText("Please enter an Instance ID.")
             self.instance_input.setFocus()
@@ -752,6 +1352,11 @@ class App(QtWidgets.QWidget):
             self.output.setPlainText("Invalid Instance ID format. Must be at least 4 digits and contain only numbers.")
             self.instance_input.setFocus()
             return None
+
+        # Save to history and settings
+        self._save_instance_to_history(instance_id)
+        self.settings.setValue("last_instance_id", instance_id)
+
         return instance_id
 
     def _set_status(self, msg: str):
@@ -781,27 +1386,66 @@ class App(QtWidgets.QWidget):
     def _reauthenticate_kibana(self):
         """Force re-authentication with Kibana by clearing all credentials and starting fresh."""
         cred_mgr = get_credential_manager()
-        cred_mgr.clear()  # Clear all certificates and cookies
+        cred_mgr.clear(clear_saved=True)  # Clear all certificates, cookies, and saved credentials
         self.output.setPlainText("Clearing all credentials...")
         if not self._ensure_authentication():
             self.output.setPlainText("Re-authentication cancelled.")
 
+    def _open_settings(self):
+        """Open the application settings dialog."""
+        dlg = AppSettingsDialog(self, self.settings)
+        dlg.exec()
+
     def _authenticate_kibana(self) -> bool:
         """
         Authenticate with Kibana using username/password.
-        Tries environment credentials first, then prompts user with retry on failure.
+        Tries saved credentials first, then environment, then prompts user with retry on failure.
 
         Returns:
             True if authentication succeeded, False if authentication failed or was cancelled
         """
         cred_mgr = get_credential_manager()
-        env_username = os.getenv("KIBANA_USER")
-        env_password = os.getenv("KIBANA_PASS")
-
+        
         # Show initial status
         self.output.setPlainText("Starting Kibana authentication...")
 
-        # Try environment credentials first
+        # Try saved credentials first (from previous login)
+        saved_creds = cred_mgr.get_saved_credentials()
+        if saved_creds:
+            saved_username, saved_password = saved_creds
+            # Show progress dialog for authentication
+            progress = QtWidgets.QProgressDialog("Authenticating with saved credentials...", "Please wait...", 0, 0, self)
+            progress.setWindowModality(QtCore.Qt.WindowModal)
+            progress.setWindowTitle("Kibana Authentication")
+            progress.setCancelButton(None)
+            progress.setMinimumDuration(0)
+            progress.setLabelText(f"Authenticating as {saved_username} using certificate...")
+            progress.show()
+
+            try:
+                cookie = get_kibana_session_cookie_with_password(
+                    saved_username, saved_password, cred_mgr.get_certificate_files()
+                )
+                if cookie:
+                    cred_mgr.set_kibana_cookie(cookie)
+                    self.output.setPlainText(f"Welcome back! Authenticated as {saved_username}")
+                    return True
+                else:
+                    # Saved credentials failed - clear them and continue to prompt
+                    self.output.setPlainText(
+                        "Saved credentials are no longer valid.\n"
+                        "Please enter your credentials..."
+                    )
+                    cred_mgr.clear_saved_credentials()
+            except Exception:
+                # Saved credentials failed - clear them
+                cred_mgr.clear_saved_credentials()
+            finally:
+                progress.close()
+
+        # Try environment credentials
+        env_username = os.getenv("KIBANA_USER")
+        env_password = os.getenv("KIBANA_PASS")
         if env_username and env_password:
             # Show progress dialog for authentication
             progress = QtWidgets.QProgressDialog("Authenticating with Kibana...", "Please wait...", 0, 0, self)
@@ -836,7 +1480,7 @@ class App(QtWidgets.QWidget):
                 self.output.setPlainText("Kibana authentication cancelled.")
                 return False  # Authentication failed, don't proceed with API calls
 
-            username, password = login_dialog.get_credentials()
+            username, password, remember_me = login_dialog.get_credentials()
             prefill_username = username  # Remember username for retry
 
             # Show authentication message in output area
@@ -851,6 +1495,9 @@ class App(QtWidgets.QWidget):
 
                 if cookie:
                     cred_mgr.set_kibana_cookie(cookie)
+                    # Save credentials only if user opted in
+                    if remember_me:
+                        cred_mgr.save_credentials(username, password)
                     self.output.setPlainText("Certificate and Kibana session configured!")
                     return True
                 else:
@@ -2613,6 +3260,17 @@ class App(QtWidgets.QWidget):
         # Could log to console or show subtle notification if needed
         print(f"Update check failed: {error_msg}")
 
+    def closeEvent(self, event):
+        """Save window size, splitter position, and current tab when closing."""
+        self.settings.setValue("window_size", self.size())
+        if hasattr(self, "tabs"):
+            self.settings.setValue("last_tab_index", self.tabs.currentIndex())
+        event.accept()
+
+    def _on_tab_changed(self, index):
+        """Save the current tab index when user switches tabs."""
+        self.settings.setValue("last_tab_index", index)
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
@@ -2620,7 +3278,6 @@ if __name__ == "__main__":
         app.setStyleSheet(f.read())
     app.setWindowIcon(QtGui.QIcon(resource_path("ui/greenapiicon.ico")))
     w = App()
-    w.setMinimumSize(600, 400)
-    w.resize(750, 600)
+    # Window size is now set in __init__ based on saved settings or defaults
     w.show()
     app.exec()

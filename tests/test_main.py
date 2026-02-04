@@ -17,13 +17,13 @@ class TestApp:
 
     def test_get_instance_id_or_warn_valid(self, app):
         """Test valid instance ID validation."""
-        app.instance_input.setText("7107348018")
+        app.instance_input.setCurrentText("7107348018")
         result = app._get_instance_id_or_warn()
         assert result == "7107348018"
 
     def test_get_instance_id_or_warn_empty(self, app):
         """Test empty instance ID handling."""
-        app.instance_input.setText("")
+        app.instance_input.setCurrentText("")
         result = app._get_instance_id_or_warn()
         assert result is None
         # Check that error message was set
@@ -31,27 +31,27 @@ class TestApp:
 
     def test_get_instance_id_or_warn_too_short(self, app):
         """Test instance ID that is too short."""
-        app.instance_input.setText("123")
+        app.instance_input.setCurrentText("123")
         result = app._get_instance_id_or_warn()
         assert result is None
         assert "Invalid Instance ID format" in app.output.toPlainText()
 
     def test_get_instance_id_or_warn_contains_letters(self, app):
         """Test instance ID that contains non-numeric characters."""
-        app.instance_input.setText("1234abcd")
+        app.instance_input.setCurrentText("1234abcd")
         result = app._get_instance_id_or_warn()
         assert result is None
         assert "Invalid Instance ID format" in app.output.toPlainText()
 
     def test_get_instance_id_or_warn_with_whitespace(self, app):
         """Test instance ID with leading/trailing whitespace."""
-        app.instance_input.setText("  7107348018  ")
+        app.instance_input.setCurrentText("  7107348018  ")
         result = app._get_instance_id_or_warn()
         assert result == "7107348018"
 
     def test_get_instance_id_or_warn_minimum_valid(self, app):
         """Test minimum valid instance ID (4 digits)."""
-        app.instance_input.setText("1234")
+        app.instance_input.setCurrentText("1234")
         result = app._get_instance_id_or_warn()
         assert result == "1234"
 
@@ -124,8 +124,12 @@ class TestApp:
 
     @patch("app.main.QtWidgets.QProgressDialog")
     @patch("app.main.get_kibana_session_cookie_with_password")
-    def test_authenticate_kibana_progress_dialog_creation(self, mock_get_cookie, mock_progress_dialog, app):
+    @patch("greenapi.credentials.keyring.get_password")
+    def test_authenticate_kibana_progress_dialog_creation(self, mock_keyring, mock_get_cookie, mock_progress_dialog, app):
         """Test that the authentication progress dialog is created with correct settings."""
+        # Mock no saved credentials
+        mock_keyring.return_value = None
+        
         # Mock the progress dialog
         mock_dialog = MagicMock()
         mock_progress_dialog.return_value = mock_dialog

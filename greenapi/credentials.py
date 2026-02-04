@@ -6,6 +6,7 @@ import tempfile
 import os
 import subprocess
 import secrets
+import keyring
 from pathlib import Path
 from typing import Optional
 import atexit
@@ -254,6 +255,50 @@ class CredentialManager:
         """Get the Kibana session cookie."""
         return self._kibana_cookie
 
+    def save_credentials(self, username: str, password: str):
+        """Save username and password to Windows Credential Manager."""
+        try:
+            keyring.set_password("GreenAPIHelper", "kibana_username", username)
+            keyring.set_password("GreenAPIHelper", username, password)
+        except Exception:
+            pass  # Fail silently if credential storage fails
+
+    def get_saved_credentials(self) -> Optional[tuple[str, str]]:
+        """Retrieve saved username and password from Windows Credential Manager."""
+        try:
+            username = keyring.get_password("GreenAPIHelper", "kibana_username")
+            if username:
+                password = keyring.get_password("GreenAPIHelper", username)
+                if password:
+                    return (username, password)
+        except Exception:
+            pass
+        return None
+
+    def clear_saved_credentials(self):
+        """Clear saved credentials from Windows Credential Manager."""
+        try:
+            username = keyring.get_password("GreenAPIHelper", "kibana_username")
+            if username:
+                keyring.delete_password("GreenAPIHelper", username)
+            keyring.delete_password("GreenAPIHelper", "kibana_username")
+        except Exception:
+            pass
+
+    def save_certificate_thumbprint(self, thumbprint: str):
+        """Save certificate thumbprint for auto-selection on next launch."""
+        try:
+            keyring.set_password("GreenAPIHelper", "cert_thumbprint", thumbprint)
+        except Exception:
+            pass
+
+    def get_saved_certificate_thumbprint(self) -> Optional[str]:
+        """Get saved certificate thumbprint."""
+        try:
+            return keyring.get_password("GreenAPIHelper", "cert_thumbprint")
+        except Exception:
+            return None
+
     def has_certificate(self) -> bool:
         """Check if a certificate is configured."""
         return self._temp_cert_file is not None and self._temp_cert_file.exists()
@@ -287,12 +332,18 @@ class CredentialManager:
         except Exception:
             pass
 
-    def clear(self):
-        """Clear all credentials and clean up files."""
+    def clear(self, clear_saved=False):
+        """Clear all credentials and clean up files.
+        
+        Args:
+            clear_saved: If True, also clear saved credentials from Windows Credential Manager
+        """
         self.cleanup()
         self._cert_pem = None
         self._cert_context = None
         self._kibana_cookie = None
+        if clear_saved:
+            self.clear_saved_credentials()
 
 
 # Global credential manager instance
