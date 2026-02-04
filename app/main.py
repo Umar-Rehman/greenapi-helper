@@ -151,6 +151,7 @@ class App(QtWidgets.QWidget):
                 lambda u, i, t: ga.get_outgoing_msgs_journal(u, i, t, minutes=1440),
                 True,
             ),
+            "run_get_contacts": ("Fetching Contacts...", ga.get_contacts, False),
         }
 
         root = QtWidgets.QVBoxLayout()
@@ -192,7 +193,12 @@ class App(QtWidgets.QWidget):
         self._create_account_tab(tabs)
         self._create_journals_tab(tabs)
         self._create_queues_tab(tabs)
+        self._create_groups_tab(tabs)
+        self._create_sending_tab(tabs)
+        self._create_receiving_tab(tabs)
         self._create_statuses_tab(tabs)
+        self._create_read_mark_tab(tabs)
+        self._create_service_methods_tab(tabs)
         root.addWidget(tabs)
 
     def _create_account_tab(self, tabs):
@@ -211,10 +217,16 @@ class App(QtWidgets.QWidget):
             self.run_set_instance_settings,
             "post",
         )
-        self.get_wa_settings_button = self._add_button(
-            account_layout, "Get WhatsApp Settings", self.run_get_wa_settings
+        self.get_account_settings_button = self._add_button(
+            account_layout, "Get Account Settings", self.run_get_account_settings
         )
         self.get_qr_button = self._add_button(account_layout, "Get QR Code", self.run_get_qr_code)
+        self.get_auth_code_button = self._add_button(
+            account_layout, "Get Authorization Code", self.run_get_authorization_code
+        )
+        self.update_token_button = self._add_button(
+            account_layout, "Update API Token", self.run_update_api_token, "danger"
+        )
         self.logout_button = self._add_button(account_layout, "Logout Instance", self.run_logout_instance, "danger")
         self.reboot_button = self._add_button(account_layout, "Reboot Instance", self.run_reboot_instance, "danger")
         account_layout.addStretch(1)
@@ -258,9 +270,75 @@ class App(QtWidgets.QWidget):
         queue_layout.addStretch(1)
         tabs.addTab(queue_tab, "Queues")
 
+    def _create_groups_tab(self, tabs):
+        groups_tab = QtWidgets.QWidget()
+        groups_layout = QtWidgets.QVBoxLayout(groups_tab)
+        self.create_group_button = self._add_button(groups_layout, "Create Group", self.run_create_group, "post")
+        self.update_group_name_button = self._add_button(
+            groups_layout, "Update Group Name", self.run_update_group_name, "post"
+        )
+        self.get_group_data_button = self._add_button(groups_layout, "Get Group Data", self.run_get_group_data)
+        self.add_participant_button = self._add_button(
+            groups_layout, "Add Group Participant", self.run_add_group_participant, "post"
+        )
+        self.remove_participant_button = self._add_button(
+            groups_layout, "Remove Group Participant", self.run_remove_group_participant, "post"
+        )
+        self.set_admin_button = self._add_button(groups_layout, "Set Group Admin", self.run_set_group_admin, "post")
+        self.remove_admin_button = self._add_button(
+            groups_layout, "Remove Group Admin", self.run_remove_group_admin, "post"
+        )
+        self.leave_group_button = self._add_button(groups_layout, "Leave Group", self.run_leave_group, "danger")
+        self.update_group_settings_button = self._add_button(
+            groups_layout, "Update Group Settings", self.run_update_group_settings, "post"
+        )
+        groups_layout.addStretch(1)
+        tabs.addTab(groups_tab, "Groups")
+
+    def _create_sending_tab(self, tabs):
+        sending_tab = QtWidgets.QWidget()
+        sending_layout = QtWidgets.QVBoxLayout(sending_tab)
+        self.send_message_button = self._add_button(sending_layout, "Send Text Message", self.run_send_message, "post")
+        self.send_file_url_button = self._add_button(
+            sending_layout, "Send File by URL", self.run_send_file_by_url, "post"
+        )
+        self.send_poll_button = self._add_button(sending_layout, "Send Poll", self.run_send_poll, "post")
+        self.send_location_button = self._add_button(sending_layout, "Send Location", self.run_send_location, "post")
+        self.send_contact_button = self._add_button(sending_layout, "Send Contact", self.run_send_contact, "post")
+        self.forward_messages_button = self._add_button(
+            sending_layout, "Forward Messages", self.run_forward_messages, "post"
+        )
+        sending_layout.addStretch(1)
+        tabs.addTab(sending_tab, "Sending")
+
+    def _create_receiving_tab(self, tabs):
+        receiving_tab = QtWidgets.QWidget()
+        receiving_layout = QtWidgets.QVBoxLayout(receiving_tab)
+        self.receive_notification_button = self._add_button(
+            receiving_layout, "Receive Notification", self.run_receive_notification
+        )
+        self.delete_notification_button = self._add_button(
+            receiving_layout, "Delete Notification", self.run_delete_notification, "danger"
+        )
+        self.download_file_button = self._add_button(
+            receiving_layout, "Download File from Message", self.run_download_file, "post"
+        )
+        receiving_layout.addStretch(1)
+        tabs.addTab(receiving_tab, "Receiving")
+
     def _create_statuses_tab(self, tabs):
         status_tab = QtWidgets.QWidget()
         status_layout = QtWidgets.QVBoxLayout(status_tab)
+        self.send_text_status_button = self._add_button(
+            status_layout, "Send Text Status", self.run_send_text_status, "post"
+        )
+        self.send_voice_status_button = self._add_button(
+            status_layout, "Send Voice Status", self.run_send_voice_status, "post"
+        )
+        self.send_media_status_button = self._add_button(
+            status_layout, "Send Media Status", self.run_send_media_status, "post"
+        )
+        self.delete_status_button = self._add_button(status_layout, "Delete Status", self.run_delete_status, "danger")
         self.incoming_status_button = self._add_button(
             status_layout, "Get Incoming Statuses", self.run_get_incoming_statuses
         )
@@ -270,6 +348,40 @@ class App(QtWidgets.QWidget):
         self.status_stat_button = self._add_button(status_layout, "Get Status Statistic", self.run_get_status_statistic)
         status_layout.addStretch(1)
         tabs.addTab(status_tab, "Statuses")
+
+    def _create_service_methods_tab(self, tabs):
+        service_tab = QtWidgets.QWidget()
+        service_layout = QtWidgets.QVBoxLayout(service_tab)
+        self.get_contacts_button = self._add_button(service_layout, "Get Contacts", self.run_get_contacts)
+        self.check_whatsapp_button = self._add_button(
+            service_layout, "Check Whatsapp Availability", self.run_check_whatsapp
+        )
+        self.check_max_button = self._add_button(service_layout, "Check MAX Availability", self.run_check_max)
+        self.get_contact_info_button = self._add_button(service_layout, "Get Contact Info", self.run_get_contact_info)
+        self.get_avatar_button = self._add_button(service_layout, "Get Avatar", self.run_get_avatar)
+        self.edit_message_button = self._add_button(service_layout, "Edit Message", self.run_edit_message, "post")
+        self.delete_message_button = self._add_button(
+            service_layout, "Delete Message", self.run_delete_message, "danger"
+        )
+        self.archive_chat_button = self._add_button(service_layout, "Archive Chat", self.run_archive_chat, "post")
+        self.unarchive_chat_button = self._add_button(service_layout, "Unarchive Chat", self.run_unarchive_chat, "post")
+        self.disappearing_chat_button = self._add_button(
+            service_layout, "Set Disappearing Messages", self.run_set_disappearing_chat, "post"
+        )
+        service_layout.addStretch(1)
+        tabs.addTab(service_tab, "Service Methods")
+
+    def _create_read_mark_tab(self, tabs):
+        read_mark_tab = QtWidgets.QWidget()
+        read_mark_layout = QtWidgets.QVBoxLayout(read_mark_tab)
+        self.mark_message_read_button = self._add_button(
+            read_mark_layout, "Mark Message as Read", self.run_mark_message_as_read, "post"
+        )
+        self.mark_chat_read_button = self._add_button(
+            read_mark_layout, "Mark Chat as Read", self.run_mark_chat_as_read, "post"
+        )
+        read_mark_layout.addStretch(1)
+        tabs.addTab(read_mark_tab, "Read Mark")
 
     def _create_progress_area(self, root):
         """Create the progress bar area for showing loading states."""
@@ -333,9 +445,13 @@ class App(QtWidgets.QWidget):
             except Exception:
                 settings_dict = {}
 
+            # Detect instance type from API URL
+            api_url = self._ctx.get("api_url", "")
+            instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
             # Allow user to retry settings if confirmation is cancelled
             while True:
-                dlg = instance_settings.InstanceSettingsDialog(self, current=settings_dict)
+                dlg = instance_settings.InstanceSettingsDialog(self, current=settings_dict, instance_type=instance_type)
                 if dlg.exec() != QtWidgets.QDialog.Accepted:
                     self.output.setPlainText("Set settings cancelled.")
                     return
@@ -395,7 +511,10 @@ class App(QtWidgets.QWidget):
         }:
             instance_id = self._ctx.get("instance_id", "")
             api_token = self._ctx.get("api_token", "")
-            qr_link = f"https://qr.green-api.com/wainstance{instance_id}/{api_token}"
+            api_url = self._ctx.get("api_url", "")
+            # Add /v3 suffix for MAX instances
+            v3_suffix = "/v3" if ga.is_max_instance(api_url) else ""
+            qr_link = f"https://qr.green-api.com/wainstance{instance_id}/{api_token}{v3_suffix}"
             if t == "alreadyLogged":
                 self.output.setPlainText(
                     f"Instance is already authorised.\nTo get a new QR code, first run Logout.\n\nQR link:\n{qr_link}"
@@ -866,21 +985,83 @@ class App(QtWidgets.QWidget):
     def run_get_qr_code(self):
         self._run_mapped_api_call("run_get_qr_code")
 
-    def run_get_wa_settings(self):
+    def run_get_authorization_code(self):
+        """Prompt for phone number and get authorization code (WhatsApp only)."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't support this
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Get Authorization Code is not available for MAX instances.\n"
+                "This endpoint is only supported by WhatsApp instances."
+            )
+            return
+
+        phone = forms.ask_check_whatsapp(self)
+        if phone is None:
+            self.output.setPlainText("Get Authorization Code cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.get_authorization_code(api_url, instance_id, api_token, phone),
+            )
+
+        self._run_async(f"Getting authorization code for {phone}...", work)
+
+    def run_update_api_token(self):
+        """Regenerate API token for this instance (WhatsApp only)."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't support this
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Update API Token is not available for MAX instances.\n"
+                "This endpoint is only supported by WhatsApp instances."
+            )
+            return
+
+        if not self._confirm_action(
+            "Confirm Update API Token",
+            f"Are you sure you want to regenerate the API token for instance {instance_id}?\n\n"
+            "WARNING: The old API token will be invalidated immediately. You will need to update all integrations.",
+            "Update API Token cancelled.",
+        ):
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id, lambda api_url, api_token: ga.update_api_token(api_url, instance_id, api_token)
+            )
+
+        self._run_async("Updating API token...", work)
+
+    def run_get_account_settings(self):
         instance_id = self._get_instance_id_or_warn()
         if not instance_id or not self._ensure_authentication():
             return
 
         def work():
-            output = self._with_ctx(instance_id, lambda u, t: ga.get_wa_settings(u, instance_id, t))
-            if not isinstance(output, dict):
-                output = (
-                    "WhatsApp account not found. This instance may be for another service. "
-                    "You can check the typeInstance with the Get Instance Settings button."
-                )
-            return output
+            return self._with_ctx(instance_id, lambda u, t: ga.get_account_settings(u, instance_id, t))
 
-        self._run_async("Fetching WhatsApp settings...", work)
+        self._run_async("Fetching account settings...", work)
 
     # Journal API methods
 
@@ -1027,9 +1208,45 @@ class App(QtWidgets.QWidget):
     # Status API methods
 
     def run_get_incoming_statuses(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't have status endpoints
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Status endpoints are not available for MAX instances.\n"
+                "MAX instances use the /v3 API and do not support status tracking."
+            )
+            return
+
         self._run_mapped_api_call("run_get_incoming_statuses")
 
     def run_get_outgoing_statuses(self):
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't have status endpoints
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Status endpoints are not available for MAX instances.\n"
+                "MAX instances use the /v3 API and do not support status tracking."
+            )
+            return
+
         self._run_mapped_api_call("run_get_outgoing_statuses")
 
     def run_get_status_statistic(self):
@@ -1039,6 +1256,17 @@ class App(QtWidgets.QWidget):
 
         # Ensure authentication in main thread
         if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't have status endpoints
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Status endpoints are not available for MAX instances.\n"
+                "MAX instances use the /v3 API and do not support status tracking."
+            )
             return
 
         id_message = forms.ask_status_statistic(self)
@@ -1053,6 +1281,1223 @@ class App(QtWidgets.QWidget):
             )
 
         self._run_async(f"Fetching Status Statistic for {id_message}...", work)
+
+    def run_send_text_status(self):
+        """Send a text status."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't have status endpoints
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Status endpoints are not available for MAX instances.\n"
+                "MAX instances use the /v3 API and do not support status tracking."
+            )
+            return
+
+        result = forms.ask_send_text_status(self)
+        if result is None:
+            self.output.setPlainText("Send Text Status cancelled.")
+            return
+
+        # Parse participants if provided
+        participants = None
+        if result.get("participants"):
+            participants = [p.strip() for p in result["participants"].split(",") if p.strip()]
+
+        # Build kwargs
+        kwargs = {"message": result["message"]}
+        if result.get("backgroundColor"):
+            kwargs["background_color"] = result["backgroundColor"]
+        if result.get("font"):
+            kwargs["font"] = result["font"]
+        if participants:
+            kwargs["participants"] = participants
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_text_status(api_url, instance_id, api_token, **kwargs),
+            )
+
+        self._run_async("Sending text status...", work)
+
+    def run_send_voice_status(self):
+        """Send a voice status."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't have status endpoints
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Status endpoints are not available for MAX instances.\n"
+                "MAX instances use the /v3 API and do not support status tracking."
+            )
+            return
+
+        result = forms.ask_send_voice_status(self)
+        if result is None:
+            self.output.setPlainText("Send Voice Status cancelled.")
+            return
+
+        # Parse participants if provided
+        participants = None
+        if result.get("participants"):
+            participants = [p.strip() for p in result["participants"].split(",") if p.strip()]
+
+        # Build kwargs
+        kwargs = {
+            "url_file": result["urlFile"],
+            "file_name": result["fileName"],
+        }
+        if result.get("backgroundColor"):
+            kwargs["background_color"] = result["backgroundColor"]
+        if participants:
+            kwargs["participants"] = participants
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_voice_status(api_url, instance_id, api_token, **kwargs),
+            )
+
+        self._run_async("Sending voice status...", work)
+
+    def run_send_media_status(self):
+        """Send a media (image/video) status."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't have status endpoints
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Status endpoints are not available for MAX instances.\n"
+                "MAX instances use the /v3 API and do not support status tracking."
+            )
+            return
+
+        result = forms.ask_send_media_status(self)
+        if result is None:
+            self.output.setPlainText("Send Media Status cancelled.")
+            return
+
+        # Parse participants if provided
+        participants = None
+        if result.get("participants"):
+            participants = [p.strip() for p in result["participants"].split(",") if p.strip()]
+
+        # Build kwargs
+        kwargs = {
+            "url_file": result["urlFile"],
+            "file_name": result["fileName"],
+        }
+        if result.get("caption"):
+            kwargs["caption"] = result["caption"]
+        if participants:
+            kwargs["participants"] = participants
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_media_status(api_url, instance_id, api_token, **kwargs),
+            )
+
+        self._run_async("Sending media status...", work)
+
+    def run_delete_status(self):
+        """Delete a status."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type - MAX instances don't have status endpoints
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Status endpoints are not available for MAX instances.\n"
+                "MAX instances use the /v3 API and do not support status tracking."
+            )
+            return
+
+        result = forms.ask_delete_status(self)
+        if result is None:
+            self.output.setPlainText("Delete Status cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.delete_status(
+                    api_url, instance_id, api_token, id_message=result["idMessage"]
+                ),
+            )
+
+        self._run_async("Deleting status...", work)
+
+    def run_get_contacts(self):
+        """Run the getContacts API call and show results."""
+        self._run_mapped_api_call("run_get_contacts")
+
+    def run_check_whatsapp(self):
+        """Prompt for phone number and call checkWhatsapp API."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Check Whatsapp is not available for MAX instances.\n"
+                "MAX instances use the /v3 API and should use 'Check MAX Availability' instead."
+            )
+            return
+
+        # Prompt for phone number using shared form helper
+        phone = forms.ask_check_whatsapp(self)
+        if phone is None:
+            self.output.setPlainText("Check Whatsapp cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id, lambda api_url, api_token: ga.check_whatsapp(api_url, instance_id, api_token, phone)
+            )
+
+        self._run_async(f"Checking Whatsapp for {phone}...", work)
+
+    def run_check_max(self):
+        """Prompt for phone number and force flag, then call checkAccount API (MAX only)."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Validate instance type
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if not ga.is_max_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Check MAX is only available for MAX instances.\n"
+                "WhatsApp instances should use 'Check Whatsapp Availability' instead."
+            )
+            return
+
+        result = forms.ask_check_max(self)
+        if result is None:
+            self.output.setPlainText("Check MAX cancelled.")
+            return
+
+        phone, force = result
+
+        def work():
+            return self._with_ctx(
+                instance_id, lambda api_url, api_token: ga.check_max(api_url, instance_id, api_token, phone, force)
+            )
+
+        force_text = " (ignoring cache)" if force else ""
+        self._run_async(f"Checking MAX for {phone}{force_text}...", work)
+
+    def run_get_contact_info(self):
+        """Prompt for chatId and call GetContactInfo API."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        # Prepare default based on instance type
+        default_value = self._last_chat_id or ""
+        # If switching instance types, clear the default to avoid confusion
+        if instance_type == "whatsapp" and default_value and not default_value.endswith("@c.us"):
+            default_value = ""
+        elif instance_type == "max" and default_value.endswith("@c.us"):
+            default_value = ""
+        # For WhatsApp, strip @c.us suffix for input
+        elif instance_type == "whatsapp" and default_value.endswith("@c.us"):
+            default_value = default_value[:-5]
+
+        chat_id = forms.ask_get_contact_info(self, chat_id_default=default_value, instance_type=instance_type)
+        if chat_id is None:
+            self.output.setPlainText("Get Contact Info cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id, lambda api_url, api_token: ga.get_contact_info(api_url, instance_id, api_token, chat_id)
+            )
+
+        self._last_chat_id = chat_id
+        self._run_async(f"Fetching Contact Info for {chat_id}...", work)
+
+    # Group handler methods
+
+    def run_create_group(self):
+        """Prompt for group details and create a new group."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_create_group(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Create Group cancelled.")
+            return
+
+        group_name, chat_ids = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.create_group(api_url, instance_id, api_token, group_name, chat_ids),
+            )
+
+        self._run_async(f"Creating group '{group_name}' with {len(chat_ids)} participants...", work)
+
+    def run_update_group_name(self):
+        """Prompt for group ID and new name, then update the group."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_update_group_name(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Update Group Name cancelled.")
+            return
+
+        group_id, group_name = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.update_group_name(api_url, instance_id, api_token, group_id, group_name),
+            )
+
+        self._run_async(f"Updating group name to '{group_name}'...", work)
+
+    def run_get_group_data(self):
+        """Prompt for group ID and get group information."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        group_id = forms.ask_group_id(self, title="Get Group Data", instance_type=instance_type)
+        if group_id is None:
+            self.output.setPlainText("Get Group Data cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.get_group_data(api_url, instance_id, api_token, group_id),
+            )
+
+        self._run_async(f"Fetching group data for {group_id}...", work)
+
+    def run_add_group_participant(self):
+        """Prompt for group ID and participant, then add participant to group."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_group_participant(self, title="Add Group Participant", instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Add Group Participant cancelled.")
+            return
+
+        group_id, participant_chat_id = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.add_group_participant(
+                    api_url, instance_id, api_token, group_id, participant_chat_id
+                ),
+            )
+
+        self._run_async(f"Adding participant {participant_chat_id} to group...", work)
+
+    def run_remove_group_participant(self):
+        """Prompt for group ID and participant, then remove participant from group."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_group_participant(self, title="Remove Group Participant", instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Remove Group Participant cancelled.")
+            return
+
+        group_id, participant_chat_id = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.remove_group_participant(
+                    api_url, instance_id, api_token, group_id, participant_chat_id
+                ),
+            )
+
+        self._run_async(f"Removing participant {participant_chat_id} from group...", work)
+
+    def run_set_group_admin(self):
+        """Prompt for group ID and participant, then grant admin rights."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_group_participant(self, title="Set Group Admin", instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Set Group Admin cancelled.")
+            return
+
+        group_id, participant_chat_id = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.set_group_admin(
+                    api_url, instance_id, api_token, group_id, participant_chat_id
+                ),
+            )
+
+        self._run_async(f"Setting {participant_chat_id} as group admin...", work)
+
+    def run_remove_group_admin(self):
+        """Prompt for group ID and participant, then remove admin rights."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_group_participant(self, title="Remove Group Admin", instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Remove Group Admin cancelled.")
+            return
+
+        group_id, participant_chat_id = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.remove_group_admin(
+                    api_url, instance_id, api_token, group_id, participant_chat_id
+                ),
+            )
+
+        self._run_async(f"Removing admin rights from {participant_chat_id}...", work)
+
+    def run_leave_group(self):
+        """Prompt for group ID and leave the group."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        group_id = forms.ask_group_id(self, title="Leave Group", instance_type=instance_type)
+        if group_id is None:
+            self.output.setPlainText("Leave Group cancelled.")
+            return
+
+        # Confirmation dialog
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Confirm Leave Group",
+            f"Are you sure you want to leave group {group_id}?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            self.output.setPlainText("Leave Group cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.leave_group(api_url, instance_id, api_token, group_id),
+            )
+
+        self._run_async(f"Leaving group {group_id}...", work)
+
+    def run_update_group_settings(self):
+        """Prompt for group settings and update them."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_group_settings(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Update Group Settings cancelled.")
+            return
+
+        group_id, allow_edit, allow_send = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.update_group_settings(
+                    api_url, instance_id, api_token, group_id, allow_edit, allow_send
+                ),
+            )
+
+        self._run_async(f"Updating group settings for {group_id}...", work)
+
+    # Additional service method handlers
+
+    def run_get_avatar(self):
+        """Prompt for chat ID and get avatar."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        chat_id = forms.ask_chat_id_simple(self, title="Get Avatar", instance_type=instance_type)
+        if chat_id is None:
+            self.output.setPlainText("Get Avatar cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.get_avatar(api_url, instance_id, api_token, chat_id),
+            )
+
+        self._run_async(f"Fetching avatar for {chat_id}...", work)
+
+    def run_edit_message(self):
+        """Prompt for chat ID, message ID, and new text, then edit the message."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_edit_message(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Edit Message cancelled.")
+            return
+
+        chat_id, id_message, message = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.edit_message(
+                    api_url, instance_id, api_token, chat_id, id_message, message
+                ),
+            )
+
+        self._run_async(f"Editing message {id_message}...", work)
+
+    def run_delete_message(self):
+        """Prompt for chat ID, message ID, and delete option, then delete the message."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_delete_message(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Delete Message cancelled.")
+            return
+
+        chat_id, id_message, only_sender_delete = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.delete_message(
+                    api_url, instance_id, api_token, chat_id, id_message, only_sender_delete
+                ),
+            )
+
+        delete_type = "for me" if only_sender_delete else "for everyone"
+        self._run_async(f"Deleting message {id_message} ({delete_type})...", work)
+
+    def run_archive_chat(self):
+        """Prompt for chat ID and archive the chat."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        chat_id = forms.ask_chat_id_simple(self, title="Archive Chat", instance_type=instance_type)
+        if chat_id is None:
+            self.output.setPlainText("Archive Chat cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.archive_chat(api_url, instance_id, api_token, chat_id),
+            )
+
+        self._run_async(f"Archiving chat {chat_id}...", work)
+
+    def run_unarchive_chat(self):
+        """Prompt for chat ID and unarchive the chat."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        chat_id = forms.ask_chat_id_simple(self, title="Unarchive Chat", instance_type=instance_type)
+        if chat_id is None:
+            self.output.setPlainText("Unarchive Chat cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.unarchive_chat(api_url, instance_id, api_token, chat_id),
+            )
+
+        self._run_async(f"Unarchiving chat {chat_id}...", work)
+
+    def run_set_disappearing_chat(self):
+        """Prompt for chat ID and expiration, then set disappearing messages."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_disappearing_chat(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Set Disappearing Messages cancelled.")
+            return
+
+        chat_id, ephemeral_expiration = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.set_disappearing_chat(
+                    api_url, instance_id, api_token, chat_id, ephemeral_expiration
+                ),
+            )
+
+        self._run_async(f"Setting disappearing messages for {chat_id} to {ephemeral_expiration}s...", work)
+
+    def run_mark_message_as_read(self):
+        """Prompt for chat ID and message ID, then mark as read."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_mark_message_as_read(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Mark Message as Read cancelled.")
+            return
+
+        chat_id, id_message = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.mark_message_as_read(
+                    api_url, instance_id, api_token, chat_id, id_message
+                ),
+            )
+
+        self._run_async(f"Marking message {id_message} as read...", work)
+
+    def run_mark_chat_as_read(self):
+        """Prompt for chat ID and mark all messages as read."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        chat_id = forms.ask_chat_id_simple(self, title="Mark Chat as Read", instance_type=instance_type)
+        if chat_id is None:
+            self.output.setPlainText("Mark Chat as Read cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.mark_chat_as_read(api_url, instance_id, api_token, chat_id),
+            )
+
+        self._run_async(f"Marking all messages in {chat_id} as read...", work)
+
+    # Sending handler methods
+
+    def run_send_message(self):
+        """Prompt for chat ID and message, then send text message."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_send_message(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Send Message cancelled.")
+            return
+
+        chat_id, message, quoted_message_id = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_message(
+                    api_url, instance_id, api_token, chat_id, message, quoted_message_id
+                ),
+            )
+
+        self._run_async(f"Sending message to {chat_id}...", work)
+
+    def run_send_file_by_url(self):
+        """Prompt for file details and send file by URL."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_send_file_by_url(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Send File by URL cancelled.")
+            return
+
+        chat_id, url_file, file_name, caption = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_file_by_url(
+                    api_url, instance_id, api_token, chat_id, url_file, file_name, caption
+                ),
+            )
+
+        self._run_async(f"Sending file to {chat_id}...", work)
+
+    def run_send_poll(self):
+        """Prompt for poll details and send poll."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_send_poll(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Send Poll cancelled.")
+            return
+
+        chat_id, message, options, multiple_answers = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_poll(
+                    api_url, instance_id, api_token, chat_id, message, options, multiple_answers
+                ),
+            )
+
+        self._run_async(f"Sending poll to {chat_id}...", work)
+
+    def run_send_location(self):
+        """Prompt for location details and send location."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_send_location(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Send Location cancelled.")
+            return
+
+        chat_id, latitude, longitude, name_location, address = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_location(
+                    api_url, instance_id, api_token, chat_id, latitude, longitude, name_location, address
+                ),
+            )
+
+        self._run_async(f"Sending location to {chat_id}...", work)
+
+    def run_send_contact(self):
+        """Prompt for contact details and send contact."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_send_contact(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Send Contact cancelled.")
+            return
+
+        chat_id, phone_contact, first_name, middle_name, last_name, company = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_contact(
+                    api_url, instance_id, api_token, chat_id, phone_contact, first_name, middle_name, last_name, company
+                ),
+            )
+
+        self._run_async(f"Sending contact to {chat_id}...", work)
+
+    def run_forward_messages(self):
+        """Prompt for forward details and forward messages."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for appropriate placeholders
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        api_url = self._ctx.get("api_url", "")
+        instance_type = "max" if ga.is_max_instance(api_url) else "whatsapp"
+
+        result = forms.ask_forward_messages(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Forward Messages cancelled.")
+            return
+
+        chat_id, chat_id_from, messages = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.forward_messages(
+                    api_url, instance_id, api_token, chat_id, chat_id_from, messages
+                ),
+            )
+
+        self._run_async(f"Forwarding {len(messages)} message(s) from {chat_id_from} to {chat_id}...", work)
+
+    def run_receive_notification(self):
+        """Receive incoming notification from the queue with countdown timer."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        result = forms.ask_receive_notification(self)
+        if result is None:
+            self.output.setPlainText("Receive Notification cancelled.")
+            return
+
+        # Get timeout value or default to 5
+        timeout = 5
+        if result.get("receiveTimeout"):
+            try:
+                timeout = int(result["receiveTimeout"])
+            except ValueError:
+                timeout = 5
+
+        # Show initial message in output
+        self.output.setPlainText(
+            f"Awaiting notifications...\n\nListening for incoming messages or events (timeout: {timeout}s)"
+        )
+
+        # Initialize active operations counter
+        if not hasattr(self, "_active_operations"):
+            self._active_operations = 0
+        self._active_operations += 1
+
+        # Create countdown timer
+        self._show_progress(f"Receiving notification (timeout: {timeout}s)...")
+        remaining_time = [timeout]  # Use list to allow mutation in closure
+
+        # Create timer for countdown updates
+        countdown_timer = QtCore.QTimer(self)
+
+        def update_countdown():
+            remaining_time[0] -= 1
+            if remaining_time[0] > 0:
+                self.status_label.setText(f"Receiving notification (timeout: {remaining_time[0]}s)...")
+
+        countdown_timer.timeout.connect(update_countdown)
+        countdown_timer.start(1000)  # Update every second
+
+        # Disable button
+        sender = self.sender()
+        btn = sender if isinstance(sender, QtWidgets.QPushButton) else None
+        if btn is not None:
+            btn.setEnabled(False)
+
+        # Initialize workers list if needed
+        if not hasattr(self, "_workers"):
+            self._workers = []
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.receive_notification(
+                    api_url, instance_id, api_token, receive_timeout=timeout
+                ),
+            )
+
+        worker = Worker(work)
+
+        def on_result(result):
+            countdown_timer.stop()
+            # Handle null response explicitly - check for null string, None, or empty
+            result_str = str(result).strip() if result is not None else ""
+            if result is None or result_str.lower() in ("null", "none", ""):
+                self.status_label.setText("No notification received")
+                self.status_label.setStyleSheet("font-weight: bold; color: #FF9800;")
+                self.output.setPlainText(
+                    f"No notification received within {timeout} seconds.\n\n"
+                    "This means no incoming messages or events were detected in the queue.\n"
+                    "Try again or increase the timeout value."
+                )
+                # Re-enable button
+                if btn is not None:
+                    btn.setEnabled(True)
+                QtCore.QTimer.singleShot(3000, self._hide_progress)
+            else:
+                # Successfully received notification
+                self._on_worker_result(result, worker, btn)
+                # The worker_finished will be called separately to handle cleanup
+
+        def on_error(error):
+            countdown_timer.stop()
+            self._on_worker_error(error, worker, btn)
+
+        def on_finished():
+            countdown_timer.stop()
+            self._on_worker_finished(worker, btn)
+
+        worker.result.connect(on_result, QtCore.Qt.QueuedConnection)
+        worker.error.connect(on_error, QtCore.Qt.QueuedConnection)
+        worker.finished.connect(on_finished, QtCore.Qt.QueuedConnection)
+
+        # Store reference to prevent garbage collection
+        worker._btn = btn
+        worker._countdown_timer = countdown_timer
+        self._workers.append(worker)
+
+        # Start in global thread pool
+        QtCore.QThreadPool.globalInstance().start(QtCore.QRunnable.create(worker.run))
+
+    def run_delete_notification(self):
+        """Delete received notification from the queue."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        result = forms.ask_delete_notification(self)
+        if result is None:
+            self.output.setPlainText("Delete Notification cancelled.")
+            return
+
+        try:
+            receipt_id = int(result["receiptId"])
+        except ValueError:
+            self.output.setPlainText("Error: Receipt ID must be a number.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.delete_notification(
+                    api_url, instance_id, api_token, receipt_id=receipt_id
+                ),
+            )
+
+        self._run_async(f"Deleting notification (receipt ID: {receipt_id})...", work)
+
+    def run_download_file(self):
+        """Download file from incoming message."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        # Ensure authentication in main thread
+        if not self._ensure_authentication():
+            return
+
+        # Detect instance type for placeholder
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        instance_type = "max" if ga.is_max_instance(self._ctx.get("api_url", "")) else "whatsapp"
+
+        result = forms.ask_download_file(self, instance_type=instance_type)
+        if result is None:
+            self.output.setPlainText("Download File cancelled.")
+            return
+
+        chat_id = result["chatId"]
+        id_message = result["idMessage"]
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.download_file(api_url, instance_id, api_token, chat_id, id_message),
+            )
+
+        self._run_async(f"Downloading file from {chat_id} (message: {id_message})...", work)
 
     @QtCore.Slot(dict)
     def _on_update_available(self, update_info: dict):
@@ -1094,7 +2539,7 @@ class App(QtWidgets.QWidget):
             # Download Manually clicked - open GitHub release page
             url_to_open = changelog_url if changelog_url else download_url
             if url_to_open:
-                QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
 
     @QtCore.Slot(str)
     def _on_update_error(self, error_msg: str):
