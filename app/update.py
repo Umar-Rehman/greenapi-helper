@@ -11,7 +11,7 @@ import subprocess
 import urllib.request
 import urllib.error
 from typing import Dict, Any, Optional
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets, QtGui
 
 
 def _log_error(message: str) -> None:
@@ -264,11 +264,11 @@ del "%~f0"
             # Download Manually button - open GitHub release page
             url_to_open = changelog_url if changelog_url else download_url
             if url_to_open:
-                QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl(url_to_open))
         elif result == QtWidgets.QMessageBox.HelpRole:
             # View Changelog button
             if changelog_url:
-                QtWidgets.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl(changelog_url))
 
 
 def get_update_manager() -> UpdateManager:

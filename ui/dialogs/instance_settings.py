@@ -29,7 +29,8 @@ def _to_yesno(value) -> str:
 
 # Metadata
 
-_SETTINGS = [
+# WhatsApp instance settings (full set)
+_SETTINGS_WHATSAPP = [
     ("markIncomingMessagesReaded", "Mark incoming messages as read"),
     ("markIncomingMessagesReadedOnReply", "Mark incoming messages read on reply"),
     ("outgoingWebhook", "Receive webhooks on sent messages statuses"),
@@ -45,12 +46,36 @@ _SETTINGS = [
     ("incomingBlockWebhook", "Get notifications about incoming chat blocks"),
 ]
 
+# MAX instance settings
+_SETTINGS_MAX = [
+    ("markIncomingMessagesReaded", "Mark incoming messages as read"),
+    ("markIncomingMessagesReadedOnReply", "Mark incoming messages read on reply"),
+    ("outgoingWebhook", "Receive webhooks on sent messages statuses"),
+    ("outgoingMessageWebhook", "Receive webhooks on messages sent from phone"),
+    ("outgoingAPIMessageWebhook", "Receive webhooks on messages sent from API"),
+    ("stateWebhook", "Receive notifications about auth state change"),
+    ("incomingWebhook", "Receive webhooks on incoming messages and files"),
+    ("editedMessageWebhook", "Get notifications about edited messages"),
+    ("deletedMessageWebhook", "Get notifications about deleted messages"),
+]
+
 
 class InstanceSettingsDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None, current: dict | None = None):
+    def __init__(self, parent: QWidget | None = None, current: dict | None = None, instance_type: str = "whatsapp"):
+        """Create instance settings dialog.
+
+        Args:
+            parent: Parent widget
+            current: Current settings dict from API
+            instance_type: Either 'whatsapp' or 'max' to show appropriate fields
+        """
         super().__init__(parent)
-        self.setWindowTitle("Instance Settings (setSettings)")
-        self.setMinimumSize(700, 560)
+        self.instance_type = instance_type
+        is_max = instance_type == "max"
+
+        title = "Instance Settings (setSettings)" + (" - MAX Instance" if is_max else " - WhatsApp Instance")
+        self.setWindowTitle(title)
+        self.setMinimumSize(700, 560 if not is_max else 400)
 
         current = current or {}
         root = QVBoxLayout(self)
@@ -117,8 +142,11 @@ class InstanceSettingsDialog(QDialog):
         sep(r)
         r += 1
 
+        # Choose settings list based on instance type
+        settings_list = _SETTINGS_MAX if is_max else _SETTINGS_WHATSAPP
+
         self._checks = {}
-        for key, label in _SETTINGS:
+        for key, label in settings_list:
             sw = ToggleSwitch()
             sw.setChecked(_to_yesno(current.get(key)) == "yes")
             self._checks[key] = sw
@@ -128,8 +156,10 @@ class InstanceSettingsDialog(QDialog):
             sep(r)
             r += 1
 
-        self._checks["markIncomingMessagesReadedOnReply"].toggled.connect(self._sync_rule)
-        self._sync_rule()
+        # Only set up the rule for instances that have both fields
+        if "markIncomingMessagesReadedOnReply" in self._checks and "markIncomingMessagesReaded" in self._checks:
+            self._checks["markIncomingMessagesReadedOnReply"].toggled.connect(self._sync_rule)
+            self._sync_rule()
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -137,6 +167,10 @@ class InstanceSettingsDialog(QDialog):
         root.addWidget(buttons)
 
     def _sync_rule(self):
+        """Sync markIncomingMessagesReaded based on markIncomingMessagesReadedOnReply."""
+        if "markIncomingMessagesReadedOnReply" not in self._checks or "markIncomingMessagesReaded" not in self._checks:
+            return
+
         on_reply = self._checks["markIncomingMessagesReadedOnReply"].isChecked()
         base = self._checks["markIncomingMessagesReaded"]
         base.setEnabled(not on_reply)
@@ -151,6 +185,10 @@ class InstanceSettingsDialog(QDialog):
         }
         for k in self._checks:
             data[k] = "yes" if self._checks[k].isChecked() else "no"
-        if data["markIncomingMessagesReadedOnReply"] == "yes":
-            data["markIncomingMessagesReaded"] = "no"
+
+        # Only apply this rule if both fields exist
+        if "markIncomingMessagesReadedOnReply" in data and "markIncomingMessagesReaded" in data:
+            if data["markIncomingMessagesReadedOnReply"] == "yes":
+                data["markIncomingMessagesReaded"] = "no"
+
         return data

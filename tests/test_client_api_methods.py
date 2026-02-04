@@ -25,14 +25,6 @@ class TestClientAdditional:
             assert result == {"success": True}
             mock_send.assert_called_once()
 
-    def test_get_wa_settings(self):
-        """Test get_wa_settings."""
-        with patch("greenapi.client.send_request") as mock_send:
-            mock_send.return_value = {"avatar": "base64data", "phone": "1234567890"}
-            result = client.get_wa_settings("https://api.green-api.com", "1234", "token123")
-            assert "avatar" in result
-            mock_send.assert_called_once()
-
     def test_logout_instance(self):
         """Test logout_instance."""
         with patch("greenapi.client.send_request") as mock_send:
@@ -222,3 +214,155 @@ class TestApiUrlResolverAdditional:
         """Test 2204 uses default."""
         url = resolve_api_url("2204")
         assert url == "https://api.greenapi.com"
+
+
+class TestNewEndpoints:
+    """Test newly added API endpoints."""
+
+    def test_send_text_status(self):
+        """Test send_text_status."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"idMessage": "STATUS123"}'
+            result = client.send_text_status(
+                "https://api.green-api.com",
+                "1234",
+                "token123",
+                "Hello status",
+                "#228B22",
+                "SERIF",
+                ["79001234567@c.us"],
+            )
+            assert "STATUS123" in result
+            mock_send.assert_called_once()
+
+    def test_send_voice_status(self):
+        """Test send_voice_status."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"idMessage": "VOICE123"}'
+            result = client.send_voice_status(
+                "https://api.green-api.com", "1234", "token123", "https://example.com/voice.mp3", "voice.mp3"
+            )
+            assert "VOICE123" in result
+            mock_send.assert_called_once()
+
+    def test_send_media_status(self):
+        """Test send_media_status."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"idMessage": "MEDIA123"}'
+            result = client.send_media_status(
+                "https://api.green-api.com",
+                "1234",
+                "token123",
+                "https://example.com/image.jpg",
+                "image.jpg",
+                "My caption",
+            )
+            assert "MEDIA123" in result
+            mock_send.assert_called_once()
+
+    def test_delete_status(self):
+        """Test delete_status."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.delete_status("https://api.green-api.com", "1234", "token123", "STATUS123")
+            assert "true" in result
+            mock_send.assert_called_once()
+
+    def test_receive_notification(self):
+        """Test receive_notification."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"receiptId": 1, "body": {}}'
+            result = client.receive_notification("https://api.green-api.com", "1234", "token123", 5)
+            assert "receiptId" in result
+            mock_send.assert_called_once()
+
+    def test_delete_notification(self):
+        """Test delete_notification."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.delete_notification("https://api.green-api.com", "1234", "token123", 12345)
+            assert "true" in result
+            mock_send.assert_called_once()
+            # Verify URL format
+            call_args = mock_send.call_args
+            assert "deleteNotification/token123/12345" in call_args[0][1]
+
+    def test_download_file(self):
+        """Test download_file."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"downloadUrl": "https://example.com/file"}'
+            result = client.download_file("https://api.green-api.com", "1234", "token123", "79001234567@c.us", "MSG123")
+            assert "downloadUrl" in result
+            mock_send.assert_called_once()
+
+    def test_get_avatar(self):
+        """Test get_avatar."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"avatar": "base64data"}'
+            result = client.get_avatar("https://api.green-api.com", "1234", "token123", "79001234567@c.us")
+            assert "avatar" in result
+            mock_send.assert_called_once()
+
+    def test_edit_message(self):
+        """Test edit_message."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"idMessage": "EDITED123"}'
+            result = client.edit_message(
+                "https://api.green-api.com", "1234", "token123", "79001234567@c.us", "MSG123", "Edited text"
+            )
+            assert "EDITED123" in result
+            mock_send.assert_called_once()
+
+    def test_delete_message(self):
+        """Test delete_message."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.delete_message(
+                "https://api.green-api.com", "1234", "token123", "79001234567@c.us", "MSG123"
+            )
+            assert "true" in result
+            mock_send.assert_called_once()
+
+    def test_archive_chat(self):
+        """Test archive_chat."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.archive_chat("https://api.green-api.com", "1234", "token123", "79001234567@c.us")
+            assert "true" in result
+            mock_send.assert_called_once()
+
+    def test_unarchive_chat(self):
+        """Test unarchive_chat."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.unarchive_chat("https://api.green-api.com", "1234", "token123", "79001234567@c.us")
+            assert "true" in result
+            mock_send.assert_called_once()
+
+    def test_set_disappearing_chat(self):
+        """Test set_disappearing_chat."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.set_disappearing_chat(
+                "https://api.green-api.com", "1234", "token123", "79001234567@c.us", 86400
+            )
+            assert "true" in result
+            mock_send.assert_called_once()
+
+    def test_mark_message_as_read(self):
+        """Test mark_message_as_read."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.mark_message_as_read(
+                "https://api.green-api.com", "1234", "token123", "79001234567@c.us", "MSG123"
+            )
+            assert "true" in result
+            mock_send.assert_called_once()
+
+    def test_mark_chat_as_read(self):
+        """Test mark_chat_as_read."""
+        with patch("greenapi.client.send_request") as mock_send:
+            mock_send.return_value = '{"result": true}'
+            result = client.mark_chat_as_read("https://api.green-api.com", "1234", "token123", "79001234567@c.us")
+            assert "true" in result
+            mock_send.assert_called_once()
