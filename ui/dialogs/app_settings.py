@@ -299,8 +299,9 @@ class AppSettingsDialog(QtWidgets.QDialog):
         )
 
         if reply == QtWidgets.QMessageBox.Yes:
-            # Clear any cached credentials (if your app stores them)
-            # This is a placeholder - implement based on your credential storage
+            # Clear credentials and cache through parent app
+            if hasattr(self.parent_app, "_reauthenticate_kibana"):
+                self.parent_app._reauthenticate_kibana()
 
             QtWidgets.QMessageBox.information(self, "Cache Cleared", "All cached data has been cleared.")
 
