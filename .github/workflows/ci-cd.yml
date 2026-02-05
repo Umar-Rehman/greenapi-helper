@@ -127,25 +127,25 @@ jobs:
       run: |
         python update_installer_version.py
         & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
-        Move-Item "dist\greenapi-helper-setup.exe" "dist\greenapi-helper-setup.exe"
+        Move-Item "dist\greenapi-helper-setup.exe" "dist\greenapi-helper-installer.exe"
 
     - name: Create helper ZIP archive
       run: |
-        Compress-Archive -Path "dist\greenapi-helper.exe","version.json" -DestinationPath "dist\greenapi-helper-$version-portable.zip"
+        Compress-Archive -Path "dist\greenapi-helper.exe","version.json" -DestinationPath "dist\greenapi-helper.zip"
 
     - name: Create installer ZIP archive
       run: |
-        Compress-Archive -Path "dist\greenapi-helper-setup.exe" -DestinationPath "dist\greenapi-helper-$version-installer.zip"
+        Compress-Archive -Path "dist\greenapi-helper-installer.exe" -DestinationPath "dist\greenapi-helper-installer.zip"
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: greenapi-helper-executable
         path: |
-          dist/greenapi-helper-setup.exe
-          dist/greenapi-helper-$version-installer.zip
+          dist/greenapi-helper-installer.exe
+          dist/greenapi-helper-installer.zip
           dist/greenapi-helper.exe
-          dist/greenapi-helper-$version-portable.zip
+          dist/greenapi-helper.zip
 
   release:
     runs-on: windows-latest
@@ -180,12 +180,12 @@ jobs:
           Choose one of the following:
           
           ### 🔧 Windows Installer (Recommended)
-          - **greenapi-helper-setup.exe** - Full installer with start menu integration and desktop shortcut
-          - **greenapi-helper-$version-installer.zip** - Same installer in ZIP format (if .exe is blocked by browser)
+          - **greenapi-helper-installer.exe** - Full installer with start menu integration and desktop shortcut
+          - **greenapi-helper-installer.zip** - Same installer in ZIP format (if .exe is blocked by browser)
           
           ### 📦 Portable Versions
           - **greenapi-helper.exe** - Standalone executable, run anywhere
-          - **greenapi-helper-$version-portable.zip** - Portable package (includes executable + version file)
+          - **greenapi-helper.zip** - Portable package (includes executable + version file)
           
           **⚠️ Windows Defender Note**: Files may be flagged as unsigned. This is a false positive.
           
@@ -194,9 +194,9 @@ jobs:
           ## What's Changed
           See the [full changelog](https://github.com/${{ github.repository }}/commits/v${{ steps.get_version.outputs.version }})
         files: |
-          greenapi-helper-setup.exe
-          greenapi-helper-$version-installer.zip
+          greenapi-helper-installer.exe
+          greenapi-helper-installer.zip
           greenapi-helper.exe
-          greenapi-helper-$version-portable.zip
+          greenapi-helper.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
