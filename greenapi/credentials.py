@@ -334,7 +334,7 @@ class CredentialManager:
 
     def clear(self, clear_saved=False):
         """Clear all credentials and clean up files.
-        
+
         Args:
             clear_saved: If True, also clear saved credentials from Windows Credential Manager
         """

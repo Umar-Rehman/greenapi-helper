@@ -325,7 +325,7 @@ class App(QtWidgets.QWidget):
 
     def _create_tabs(self, root):
         tabs = QtWidgets.QTabWidget()
-        
+
         # Create all tabs from configuration
         for tab_name in TAB_CONFIG.keys():
             self._create_tab_from_config(tabs, tab_name)
@@ -350,37 +350,37 @@ class App(QtWidgets.QWidget):
 
     def _create_tab_from_config(self, tabs, tab_name):
         """Create a tab dynamically from configuration.
-        
+
         Args:
             tabs: QTabWidget to add the tab to.
             tab_name: Name of the tab from TAB_CONFIG.
         """
         tab_widget = QtWidgets.QWidget()
         tab_layout = QtWidgets.QVBoxLayout(tab_widget)
-        
+
         config = TAB_CONFIG[tab_name]
-        
+
         for section in config["sections"]:
             # Create section group box
             group = QtWidgets.QGroupBox(section["title"])
             group_layout = QtWidgets.QVBoxLayout()
-            
+
             # Add buttons to the section
             for button_config in section["buttons"]:
                 handler_name = button_config["handler"]
                 handler = getattr(self, handler_name)
                 action_type = button_config.get("action_type")
-                
+
                 self._add_button(
                     group_layout,
                     button_config["text"],
                     handler,
                     action_type
                 )
-            
+
             group.setLayout(group_layout)
             tab_layout.addWidget(group)
-        
+
         tab_layout.addStretch(1)
         tabs.addTab(tab_widget, tab_name)
 
@@ -1405,7 +1405,7 @@ class App(QtWidgets.QWidget):
             True if authentication succeeded, False if authentication failed or was cancelled
         """
         cred_mgr = get_credential_manager()
-        
+
         # Show initial status
         self.output.setPlainText("Starting Kibana authentication...")
 
@@ -1414,7 +1414,9 @@ class App(QtWidgets.QWidget):
         if saved_creds:
             saved_username, saved_password = saved_creds
             # Show progress dialog for authentication
-            progress = QtWidgets.QProgressDialog("Authenticating with saved credentials...", "Please wait...", 0, 0, self)
+            progress = QtWidgets.QProgressDialog(
+                "Authenticating with saved credentials...", "Please wait...", 0, 0, self
+            )
             progress.setWindowModality(QtCore.Qt.WindowModal)
             progress.setWindowTitle("Kibana Authentication")
             progress.setCancelButton(None)
