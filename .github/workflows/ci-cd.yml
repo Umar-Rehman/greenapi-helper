@@ -121,10 +121,11 @@ jobs:
     - name: Install NSIS
       run: |
         choco install nsis -y
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         
     - name: Create NSIS Installer
       run: |
-        makensis installer.nsi
+        & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
 
     - name: Calculate file hashes
       id: hash
