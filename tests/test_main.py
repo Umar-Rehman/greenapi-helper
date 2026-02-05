@@ -125,11 +125,13 @@ class TestApp:
     @patch("app.main.QtWidgets.QProgressDialog")
     @patch("app.main.get_kibana_session_cookie_with_password")
     @patch("greenapi.credentials.keyring.get_password")
-    def test_authenticate_kibana_progress_dialog_creation(self, mock_keyring, mock_get_cookie, mock_progress_dialog, app):
+    def test_authenticate_kibana_progress_dialog_creation(
+        self, mock_keyring, mock_get_cookie, mock_progress_dialog, app
+    ):
         """Test that the authentication progress dialog is created with correct settings."""
         # Mock no saved credentials
         mock_keyring.return_value = None
-        
+
         # Mock the progress dialog
         mock_dialog = MagicMock()
         mock_progress_dialog.return_value = mock_dialog
