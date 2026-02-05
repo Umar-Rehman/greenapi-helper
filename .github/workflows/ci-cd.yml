@@ -138,6 +138,13 @@ jobs:
         echo "EXE SHA256: $exeHash" > dist\greenapi-helper.exe.sha256.txt
         echo "Installer SHA256: $installerHash" > dist\greenapi-helper-setup.exe.sha256.txt
 
+    - name: Create portable ZIP archive
+      run: |
+        $version = (Get-Content version.json | ConvertFrom-Json).version
+        Compress-Archive -Path "dist\greenapi-helper.exe","version.json" -DestinationPath "dist\greenapi-helper-$version-portable.zip"
+        $zipHash = (Get-FileHash -Path "dist\greenapi-helper-$version-portable.zip" -Algorithm SHA256).Hash
+        echo "ZIP SHA256: $zipHash" > "dist\greenapi-helper-$version-portable.zip.sha256.txt"
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -147,6 +154,8 @@ jobs:
           dist/greenapi-helper.exe.sha256.txt
           dist/greenapi-helper-setup.exe
           dist/greenapi-helper-setup.exe.sha256.txt
+          dist/greenapi-helper-*-portable.zip
+          dist/greenapi-helper-*-portable.zip.sha256.txt
 
   release:
     runs-on: windows-latest
@@ -185,10 +194,17 @@ jobs:
           - Clean uninstallation
           - Less likely to trigger Windows Defender
           
-          ### Option 2: Standalone Executable
-          Download `greenapi-helper.exe` if you prefer a portable version
+          ### Option 2: Portable ZIP Archive
+          Download `greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip` - Extract and run anywhere:
+          - No installation required
+          - Easy to move or backup
+          - Includes version file
+          - Perfect for USB drives or restricted environments
           
-          **⚠️ Windows Defender Note**: Both files may be flagged as they're unsigned. This is a false positive.
+          ### Option 3: Standalone Executable
+          Download `greenapi-helper.exe` if you prefer just the executable
+          
+          **⚠️ Windows Defender Note**: Files may be flagged as they're unsigned. This is a false positive.
           
           **If Windows Defender blocks download/execution:**
           1. Click "More info" → "Run anyway" when SmartScreen appears
@@ -204,6 +220,8 @@ jobs:
         files: |
           greenapi-helper-setup.exe
           greenapi-helper-setup.exe.sha256.txt
+          greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip
+          greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip.sha256.txt
           greenapi-helper.exe
           greenapi-helper.exe.sha256.txt
       env:
