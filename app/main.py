@@ -1382,7 +1382,10 @@ class App(QtWidgets.QWidget):
         """Force re-authentication with Kibana by clearing all credentials and starting fresh."""
         cred_mgr = get_credential_manager()
         cred_mgr.clear(clear_saved=True)  # Clear all certificates, cookies, and saved credentials
+        self._ctx = None  # Invalidate cached API token
         self.output.setPlainText("Clearing all credentials...")
+
+        # Force full authentication flow (certificate + Kibana credentials)
         if not self._ensure_authentication():
             self.output.setPlainText("Re-authentication cancelled.")
 
@@ -1547,13 +1550,16 @@ class App(QtWidgets.QWidget):
             # Explicitly close the certificate dialog
             cert_dialog.close()
 
+        # Check if Kibana authentication is needed (whether certificate is new or existing)
+        if not cred_mgr.has_kibana_cookie():
             # Give feedback about Kibana session status
             self.output.setPlainText("Authenticating with Kibana...")
 
-            if not cred_mgr.has_kibana_cookie() and not self._authenticate_kibana():
+            if not self._authenticate_kibana():
                 return False
-            if cred_mgr.has_kibana_cookie():
-                self.output.setPlainText("Certificate and Kibana session configured!")
+
+        if cred_mgr.has_kibana_cookie():
+            self.output.setPlainText("Certificate and Kibana session configured!")
 
         # Update client.py to use the configured certificates
         if cert_files := cred_mgr.get_certificate_files():
