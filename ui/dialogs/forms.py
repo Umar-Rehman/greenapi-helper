@@ -443,7 +443,9 @@ def ask_group_id(parent: QWidget, *, title: str = "Group ID", instance_type: str
     Returns None if cancelled, otherwise returns group ID string.
     """
     is_max = instance_type == "max"
-    group_placeholder = "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    group_placeholder = (
+        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    )
 
     dlg = FormDialog(
         title,
@@ -469,7 +471,9 @@ def ask_update_group_name(parent: QWidget, *, instance_type: str = "whatsapp"):
     Returns None if cancelled, otherwise returns (group_id, group_name).
     """
     is_max = instance_type == "max"
-    group_placeholder = "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    group_placeholder = (
+        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    )
 
     dlg = FormDialog(
         "Update Group Name",
@@ -502,7 +506,9 @@ def ask_group_participant(parent: QWidget, *, title: str = "Group Participant", 
     Returns None if cancelled, otherwise returns (group_id, participant_chat_id).
     """
     is_max = instance_type == "max"
-    group_placeholder = "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    group_placeholder = (
+        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    )
     participant_placeholder = (
         "Participant Chat ID (e.g. 10000000)" if is_max else "Participant Chat ID (e.g. 79001234568@c.us)"
     )
@@ -538,7 +544,9 @@ def ask_group_settings(parent: QWidget, *, instance_type: str = "whatsapp"):
     Returns None if cancelled, otherwise returns (group_id, allow_edit, allow_send).
     """
     is_max = instance_type == "max"
-    group_placeholder = "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    group_placeholder = (
+        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+    )
 
     dlg = FormDialog(
         "Update Group Settings",
