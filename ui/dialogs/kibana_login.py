@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QLabel,
     QPushButton,
+    QCheckBox,
     QStyleFactory,
     QWidget,
     QMessageBox,
@@ -27,6 +28,7 @@ class KibanaLoginDialog(QDialog):
 
         self._username = ""
         self._password = ""
+        self._remember_me = False
 
         self._setup_ui(prefill_username)
 
@@ -55,6 +57,11 @@ class KibanaLoginDialog(QDialog):
 
         layout.addLayout(form)
 
+        # Add Remember Me checkbox
+        self.remember_checkbox = QCheckBox("Remember my credentials (stored securely in Windows Credential Manager)")
+        self.remember_checkbox.setChecked(False)
+        layout.addWidget(self.remember_checkbox)
+
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self._on_accept)
         button_box.rejected.connect(self.reject)
@@ -78,7 +85,9 @@ class KibanaLoginDialog(QDialog):
 
         self._username = username
         self._password = password
+        self._remember_me = self.remember_checkbox.isChecked()
         self.accept()
 
-    def get_credentials(self) -> tuple[str, str]:
-        return self._username, self._password
+    def get_credentials(self) -> tuple[str, str, bool]:
+        """Return username, password, and remember_me flag."""
+        return self._username, self._password, self._remember_me
