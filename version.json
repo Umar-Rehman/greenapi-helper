@@ -1,8 +1,8 @@
 {
-  "version": "1.9.1",
-  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.9.1/greenapi-helper.exe",
+  "version": "1.9.2",
+  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.9.2/greenapi-helper.exe",
   "changelog_url": "https://github.com/Umar-Rehman/greenapi-helper/releases",
-  "minimum_version": "1.5.0",
+  "minimum_version": "1.7.0",
   "release_date": "2026-02-02",
   "notes": "Test version for simplified auto-updater functionality."
 }

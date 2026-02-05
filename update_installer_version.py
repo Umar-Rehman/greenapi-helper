@@ -20,7 +20,7 @@ def update_installer_version():
 
     # Update version in installer script
     pattern = r'(!define APP_VERSION ")[^"]*(")'
-    replacement = rf'\g<1>{version}\g<2>'
+    replacement = rf"\g<1>{version}\g<2>"
     updated_content = re.sub(pattern, replacement, content)
 
     # Write back to installer script

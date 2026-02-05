@@ -1,6 +1,5 @@
 """Tests for group ID normalization functionality."""
 
-import pytest
 from greenapi import client as ga
 
 
@@ -77,7 +76,7 @@ class TestGroupIdNormalization:
         assert result == '{"result": "success"}'
 
     def test_update_group_name_uses_chatId_not_groupId(self, monkeypatch):
-        """Test that update_group_name uses 'chatId' key instead of 'groupId' in payload."""
+        """Test that update_group_name uses 'chatId' for MAX instances, not 'groupId'."""
         captured_body = {}
 
         def mock_make_api_call(api_url, instance_id, api_token, endpoint, method, json_body=None, **kwargs):
@@ -86,16 +85,17 @@ class TestGroupIdNormalization:
 
         monkeypatch.setattr("greenapi.client.make_api_call", mock_make_api_call)
 
-        api_url = "https://api.green-api.com"
+        # Use MAX instance API URL (v3)
+        api_url = "https://api.max.green-api.com/v3"
         instance_id = "1234567890"
         api_token = "test_token"
-        group_id = "120363426336228996@g.us"
+        chat_id = "120363426336228996"
         group_name = "New Group Name"
 
-        ga.update_group_name(api_url, instance_id, api_token, group_id, group_name)
+        ga.update_group_name(api_url, instance_id, api_token, chat_id, group_name)
 
-        # Verify 'chatId' is used, not 'groupId'
+        # Verify 'chatId' is used for MAX instances, not 'groupId'
         assert "chatId" in captured_body
         assert "groupId" not in captured_body
-        assert captured_body["chatId"] == "120363426336228996@g.us"
+        assert captured_body["chatId"] == "120363426336228996"
         assert captured_body["groupName"] == group_name

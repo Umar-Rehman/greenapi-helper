@@ -74,6 +74,34 @@ def normalize_group_id(group_id: str, api_url: str) -> str:
     return group_id
 
 
+def normalize_chat_id(chat_id: str, api_url: str) -> str:
+    """Normalize chat ID format by adding @c.us suffix if missing (for WhatsApp instances).
+
+    For MAX instances (with /v3 in URL), returns the chat_id as-is.
+    For WhatsApp instances, ensures the chat_id ends with @c.us (for contacts).
+
+    Args:
+        chat_id: The chat ID to normalize (e.g., "79001234568" or "79001234568@c.us")
+        api_url: The API URL to determine instance type
+
+    Returns:
+        Normalized chat ID (e.g., "79001234568@c.us" for WhatsApp)
+    """
+    if not chat_id:
+        return chat_id
+
+    # MAX instances use numeric chat IDs without suffix
+    if is_max_instance(api_url):
+        return chat_id
+
+    # If already has a suffix (@c.us or @g.us), return as-is
+    if "@" in chat_id:
+        return chat_id
+
+    # WhatsApp instances require @c.us suffix for regular chats
+    return f"{chat_id}@c.us"
+
+
 def send_request(
     method: str,
     url: str,
@@ -293,6 +321,7 @@ def get_outgoing_msgs_journal(api_url: str, instance_id: str, api_token: str, mi
 
 def get_chat_history(api_url: str, instance_id: str, api_token: str, chat_id: str, count: int = 10) -> str:
     """Retrieve chat history for a specific chat."""
+    chat_id = normalize_chat_id(chat_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -304,6 +333,7 @@ def get_chat_history(api_url: str, instance_id: str, api_token: str, chat_id: st
 
 
 def get_message(api_url: str, instance_id: str, api_token: str, chat_id: str, id_message: str) -> str:
+    chat_id = normalize_chat_id(chat_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -890,98 +920,112 @@ def create_group(api_url: str, instance_id: str, api_token: str, group_name: str
     )
 
 
-def update_group_name(api_url: str, instance_id: str, api_token: str, group_id: str, group_name: str) -> str:
+def update_group_name(api_url: str, instance_id: str, api_token: str, chat_id: str, group_name: str) -> str:
     """Change the name of a group."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "updateGroupName",
         "POST",
-        json_body={"chatId": group_id, "groupName": group_name},
+        json_body={id_key: chat_id, "groupName": group_name},
     )
 
 
-def get_group_data(api_url: str, instance_id: str, api_token: str, group_id: str) -> str:
+def get_group_data(api_url: str, instance_id: str, api_token: str, chat_id: str) -> str:
     """Get detailed information about a group."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "getGroupData",
         "POST",
-        json_body={"chatId": group_id},
+        json_body={id_key: chat_id},
     )
 
 
 def add_group_participant(
-    api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str
+    api_url: str, instance_id: str, api_token: str, chat_id: str, participant_chat_id: str
 ) -> str:
     """Add a participant to a group."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "addGroupParticipant",
         "POST",
-        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
+        json_body={id_key: chat_id, "participantChatId": participant_chat_id},
     )
 
 
 def remove_group_participant(
-    api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str
+    api_url: str, instance_id: str, api_token: str, chat_id: str, participant_chat_id: str
 ) -> str:
     """Remove a participant from a group."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "removeGroupParticipant",
         "POST",
-        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
+        json_body={id_key: chat_id, "participantChatId": participant_chat_id},
     )
 
 
-def set_group_admin(api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str) -> str:
+def set_group_admin(api_url: str, instance_id: str, api_token: str, chat_id: str, participant_chat_id: str) -> str:
     """Grant admin rights to a group participant."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "setGroupAdmin",
         "POST",
-        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
+        json_body={id_key: chat_id, "participantChatId": participant_chat_id},
     )
 
 
-def remove_group_admin(api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str) -> str:
+def remove_group_admin(api_url: str, instance_id: str, api_token: str, chat_id: str, participant_chat_id: str) -> str:
     """Remove admin rights from a group participant."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "removeAdmin",
         "POST",
-        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
+        json_body={id_key: chat_id, "participantChatId": participant_chat_id},
     )
 
 
-def leave_group(api_url: str, instance_id: str, api_token: str, group_id: str) -> str:
+def leave_group(api_url: str, instance_id: str, api_token: str, chat_id: str) -> str:
     """Leave a group."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "leaveGroup",
         "POST",
-        json_body={"chatId": group_id},
+        json_body={id_key: chat_id},
     )
 
 
@@ -989,12 +1033,14 @@ def update_group_settings(
     api_url: str,
     instance_id: str,
     api_token: str,
-    group_id: str,
+    chat_id: str,
     allow_participants_edit_settings: bool,
     allow_participants_send_messages: bool,
 ) -> str:
     """Update group settings (who can edit group info and send messages)."""
-    group_id = normalize_group_id(group_id, api_url)
+    chat_id = normalize_group_id(chat_id, api_url)
+    # WhatsApp uses "groupId", MAX uses "chatId"
+    id_key = "chatId" if is_max_instance(api_url) else "groupId"
     return make_api_call(
         api_url,
         instance_id,
@@ -1002,7 +1048,7 @@ def update_group_settings(
         "updateGroupSettings",
         "POST",
         json_body={
-            "chatId": group_id,
+            id_key: chat_id,
             "allowParticipantsEditGroupSettings": allow_participants_edit_settings,
             "allowParticipantsSendMessages": allow_participants_send_messages,
         },
