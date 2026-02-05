@@ -50,11 +50,11 @@ jobs:
 
     - name: Run linting
       run: |
-        python -m flake8 --max-line-length=120 --extend-ignore=E203,W503 app/ greenapi/ ui/ --exclude=__pycache__,update_bloated_backup.py
+        python -m flake8 --max-line-length=120 --extend-ignore=E203,W503 app/ greenapi/ ui/ --exclude=__pycache__
 
     - name: Check formatting with black
       run: |
-        python -m black --check --diff --line-length 120 app/ greenapi/ ui/ --exclude "__pycache__|update_bloated_backup.py"
+        python -m black --check --diff --line-length 120 app/ greenapi/ ui/ --exclude "__pycache__"
 
   coverage-report:
     runs-on: ubuntu-latest
@@ -145,6 +145,13 @@ jobs:
         $zipHash = (Get-FileHash -Path "dist\greenapi-helper-$version-portable.zip" -Algorithm SHA256).Hash
         echo "ZIP SHA256: $zipHash" > "dist\greenapi-helper-$version-portable.zip.sha256.txt"
 
+    - name: Create installer ZIP archive
+      run: |
+        $version = (Get-Content version.json | ConvertFrom-Json).version
+        Compress-Archive -Path "dist\greenapi-helper-setup.exe" -DestinationPath "dist\greenapi-helper-$version-installer.zip"
+        $zipHash = (Get-FileHash -Path "dist\greenapi-helper-$version-installer.zip" -Algorithm SHA256).Hash
+        echo "Installer ZIP SHA256: $zipHash" > "dist\greenapi-helper-$version-installer.zip.sha256.txt"
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -156,6 +163,8 @@ jobs:
           dist/greenapi-helper-setup.exe.sha256.txt
           dist/greenapi-helper-*-portable.zip
           dist/greenapi-helper-*-portable.zip.sha256.txt
+          dist/greenapi-helper-*-installer.zip
+          dist/greenapi-helper-*-installer.zip.sha256.txt
 
   release:
     runs-on: windows-latest
@@ -188,11 +197,15 @@ jobs:
           ## Download Options
           
           ### Option 1: Windows Installer (Recommended)
-          Download `greenapi-helper-setup.exe` - A proper Windows installer with:
+          **Direct download:** `greenapi-helper-setup.exe`
+          
+          **ZIP download:** `greenapi-helper-${{ steps.get_version.outputs.version }}-installer.zip` (if blocked by browser/defender)
+          
+          Features:
           - Start menu integration
           - Desktop shortcut
           - Clean uninstallation
-          - Less likely to trigger Windows Defender
+          - Auto-updates work seamlessly
           
           ### Option 2: Portable ZIP Archive
           Download `greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip` - Extract and run anywhere:
@@ -200,6 +213,7 @@ jobs:
           - Easy to move or backup
           - Includes version file
           - Perfect for USB drives or restricted environments
+          - Auto-updates work
           
           ### Option 3: Standalone Executable
           Download `greenapi-helper.exe` if you prefer just the executable
@@ -209,6 +223,7 @@ jobs:
           **If Windows Defender blocks download/execution:**
           1. Click "More info" → "Run anyway" when SmartScreen appears
           2. Or add to exclusions: Windows Security → Virus & threat protection → Exclusions
+          3. Try the ZIP versions - sometimes easier to extract than download directly
           
           **Verify integrity:**
           - Download the corresponding `.sha256.txt` files to verify downloads haven't been tampered with
@@ -220,6 +235,8 @@ jobs:
         files: |
           greenapi-helper-setup.exe
           greenapi-helper-setup.exe.sha256.txt
+          greenapi-helper-${{ steps.get_version.outputs.version }}-installer.zip
+          greenapi-helper-${{ steps.get_version.outputs.version }}-installer.zip.sha256.txt
           greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip
           greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip.sha256.txt
           greenapi-helper.exe
