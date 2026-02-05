@@ -116,7 +116,7 @@ jobs:
     - name: Create executable with PyInstaller
       run: |
         python update_version_info.py
-        pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --icon ui/greenapiicon.ico --add-data "ui;ui" --add-data "version.json;." --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
+        pyinstaller --onefile --windowed --name helper --version-file version_info.txt --icon ui/greenapiicon.ico --add-data "ui;ui" --add-data "version.json;." --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
 
     - name: Install NSIS
       run: |
@@ -127,44 +127,25 @@ jobs:
       run: |
         python update_installer_version.py
         & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+        Move-Item "dist\greenapi-helper-setup.exe" "dist\installer.exe"
 
-    - name: Calculate file hashes
-      id: hash
+    - name: Create helper ZIP archive
       run: |
-        $exeHash = (Get-FileHash -Path "dist\greenapi-helper.exe" -Algorithm SHA256).Hash
-        $installerHash = (Get-FileHash -Path "dist\greenapi-helper-setup.exe" -Algorithm SHA256).Hash
-        echo "exe_sha256=$exeHash" >> $env:GITHUB_OUTPUT
-        echo "installer_sha256=$installerHash" >> $env:GITHUB_OUTPUT
-        echo "EXE SHA256: $exeHash" > dist\greenapi-helper.exe.sha256.txt
-        echo "Installer SHA256: $installerHash" > dist\greenapi-helper-setup.exe.sha256.txt
-
-    - name: Create portable ZIP archive
-      run: |
-        $version = (Get-Content version.json | ConvertFrom-Json).version
-        Compress-Archive -Path "dist\greenapi-helper.exe","version.json" -DestinationPath "dist\greenapi-helper-$version-portable.zip"
-        $zipHash = (Get-FileHash -Path "dist\greenapi-helper-$version-portable.zip" -Algorithm SHA256).Hash
-        echo "ZIP SHA256: $zipHash" > "dist\greenapi-helper-$version-portable.zip.sha256.txt"
+        Compress-Archive -Path "dist\helper.exe","version.json" -DestinationPath "dist\helper.zip"
 
     - name: Create installer ZIP archive
       run: |
-        $version = (Get-Content version.json | ConvertFrom-Json).version
-        Compress-Archive -Path "dist\greenapi-helper-setup.exe" -DestinationPath "dist\greenapi-helper-$version-installer.zip"
-        $zipHash = (Get-FileHash -Path "dist\greenapi-helper-$version-installer.zip" -Algorithm SHA256).Hash
-        echo "Installer ZIP SHA256: $zipHash" > "dist\greenapi-helper-$version-installer.zip.sha256.txt"
+        Compress-Archive -Path "dist\installer.exe" -DestinationPath "dist\installer.zip"
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: greenapi-helper-executable
         path: |
-          dist/greenapi-helper.exe
-          dist/greenapi-helper.exe.sha256.txt
-          dist/greenapi-helper-setup.exe
-          dist/greenapi-helper-setup.exe.sha256.txt
-          dist/greenapi-helper-*-portable.zip
-          dist/greenapi-helper-*-portable.zip.sha256.txt
-          dist/greenapi-helper-*-installer.zip
-          dist/greenapi-helper-*-installer.zip.sha256.txt
+          dist/installer.exe
+          dist/installer.zip
+          dist/helper.exe
+          dist/helper.zip
 
   release:
     runs-on: windows-latest
@@ -196,50 +177,26 @@ jobs:
         body: |
           ## Download Options
           
-          ### Option 1: Windows Installer (Recommended)
-          **Direct download:** `greenapi-helper-setup.exe`
+          Choose one of the following:
           
-          **ZIP download:** `greenapi-helper-${{ steps.get_version.outputs.version }}-installer.zip` (if blocked by browser/defender)
+          ### 🔧 Windows Installer (Recommended)
+          - **installer.exe** - Full installer with start menu integration and desktop shortcut
+          - **installer.zip** - Same installer in ZIP format (if .exe is blocked by browser)
           
-          Features:
-          - Start menu integration
-          - Desktop shortcut
-          - Clean uninstallation
-          - Auto-updates work seamlessly
+          ### 📦 Portable Versions
+          - **helper.exe** - Standalone executable, run anywhere
+          - **helper.zip** - Portable package (includes executable + version file)
           
-          ### Option 2: Portable ZIP Archive
-          Download `greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip` - Extract and run anywhere:
-          - No installation required
-          - Easy to move or backup
-          - Includes version file
-          - Perfect for USB drives or restricted environments
-          - Auto-updates work
+          **⚠️ Windows Defender Note**: Files may be flagged as unsigned. This is a false positive.
           
-          ### Option 3: Standalone Executable
-          Download `greenapi-helper.exe` if you prefer just the executable
-          
-          **⚠️ Windows Defender Note**: Files may be flagged as they're unsigned. This is a false positive.
-          
-          **If Windows Defender blocks download/execution:**
-          1. Click "More info" → "Run anyway" when SmartScreen appears
-          2. Or add to exclusions: Windows Security → Virus & threat protection → Exclusions
-          3. Try the ZIP versions - sometimes easier to extract than download directly
-          
-          **Verify integrity:**
-          - Download the corresponding `.sha256.txt` files to verify downloads haven't been tampered with
-          
-          **Alternative:** Run from source using Python (see README)
+          If blocked, click "More info" → "Run anyway" or add to Windows Security exclusions.
           
           ## What's Changed
           See the [full changelog](https://github.com/${{ github.repository }}/commits/v${{ steps.get_version.outputs.version }})
         files: |
-          greenapi-helper-setup.exe
-          greenapi-helper-setup.exe.sha256.txt
-          greenapi-helper-${{ steps.get_version.outputs.version }}-installer.zip
-          greenapi-helper-${{ steps.get_version.outputs.version }}-installer.zip.sha256.txt
-          greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip
-          greenapi-helper-${{ steps.get_version.outputs.version }}-portable.zip.sha256.txt
-          greenapi-helper.exe
-          greenapi-helper.exe.sha256.txt
+          installer.exe
+          installer.zip
+          helper.exe
+          helper.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
