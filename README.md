@@ -15,9 +15,26 @@ A desktop application for managing and examining Green API instances through sec
 
 ## Installation
 
-### Option 1: Pre-built Executable (Recommended)
+### Option 1: Windows Installer (Recommended)
 
 Download the latest release from the [Releases](https://github.com/yourusername/greenapi-helper/releases) page:
+
+1. Download `greenapi-helper-setup.exe`
+2. Run the installer (may require administrator privileges)
+3. The installer will:
+   - Install the application to Program Files
+   - Create Start Menu shortcuts
+   - Add a desktop shortcut
+   - Set up proper uninstallation
+4. Launch from Start Menu or desktop shortcut
+
+**Windows Defender Note**: The installer may be flagged as it's unsigned. This is a false positive. To resolve:
+- Click "More info" → "Run anyway" when SmartScreen appears
+- Or add the file to Windows Defender exclusions
+
+### Option 2: Standalone Executable
+
+Download `greenapi-helper.exe` for a portable version:
 
 1. Download `greenapi-helper.exe`
 2. **Windows Defender Note**: The executable may be flagged by Windows Defender as it's built with PyInstaller and is unsigned. This is a false positive. To resolve:
@@ -28,7 +45,7 @@ Download the latest release from the [Releases](https://github.com/yourusername/
 
 > **Why is it flagged?** PyInstaller bundles Python code into a single executable, which antivirus programs sometimes flag as suspicious. The application is open source and you can verify the code before running.
 
-### Option 2: From Source
+### Option 3: From Source
 
 ```bash
 # Clone the repository
