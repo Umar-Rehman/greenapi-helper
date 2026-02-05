@@ -21,6 +21,7 @@ if not exist "dist\greenapi-helper.exe" (
 )
 
 REM Build the installer
+python update_installer_version.py
 makensis installer.nsi
 
 if %ERRORLEVEL% EQU 0 (

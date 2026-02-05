@@ -116,7 +116,7 @@ jobs:
     - name: Create executable with PyInstaller
       run: |
         python update_version_info.py
-        pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." --icon=NONE --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
+        pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --icon ui/greenapiicon.ico --add-data "ui;ui" --add-data "version.json;." --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
 
     - name: Install NSIS
       run: |
@@ -125,6 +125,7 @@ jobs:
         
     - name: Create NSIS Installer
       run: |
+        python update_installer_version.py
         & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
 
     - name: Calculate file hashes
