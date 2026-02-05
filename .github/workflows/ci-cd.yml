@@ -116,13 +116,22 @@ jobs:
     - name: Create executable with PyInstaller
       run: |
         python update_version_info.py
-        pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets app/main.py
+        pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." --icon=NONE --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
+
+    - name: Calculate file hash
+      id: hash
+      run: |
+        $hash = (Get-FileHash -Path "dist\greenapi-helper.exe" -Algorithm SHA256).Hash
+        echo "sha256=$hash" >> $env:GITHUB_OUTPUT
+        echo "SHA256: $hash" > dist\greenapi-helper.exe.sha256.txt
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: greenapi-helper-executable
-        path: dist/greenapi-helper.exe
+        path: |
+          dist/greenapi-helper.exe
+          dist/greenapi-helper.exe.sha256.txt
 
   release:
     runs-on: windows-latest
@@ -151,6 +160,25 @@ jobs:
         name: Release v${{ steps.get_version.outputs.version }}
         draft: false
         prerelease: false
-        files: greenapi-helper.exe
+        body: |
+          ## Download
+          
+          **⚠️ Windows Defender Warning**: This executable may be flagged by Windows Defender as it's built with PyInstaller and is unsigned. This is a false positive.
+          
+          **To run the application:**
+          1. Download `greenapi-helper.exe`
+          2. If Windows Defender blocks it, click "More info" → "Run anyway"
+          3. Or add to exclusions: Windows Security → Virus & threat protection → Exclusions
+          
+          **Verify integrity:**
+          - SHA256: Download the `.sha256.txt` file to verify the executable hasn't been tampered with
+          
+          **Alternative:** Run from source using Python (see README)
+          
+          ## What's Changed
+          See the [full changelog](https://github.com/${{ github.repository }}/commits/v${{ steps.get_version.outputs.version }})
+        files: |
+          greenapi-helper.exe
+          greenapi-helper.exe.sha256.txt
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
