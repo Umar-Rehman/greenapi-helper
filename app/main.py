@@ -371,12 +371,7 @@ class App(QtWidgets.QWidget):
                 handler = getattr(self, handler_name)
                 action_type = button_config.get("action_type")
 
-                self._add_button(
-                    group_layout,
-                    button_config["text"],
-                    handler,
-                    action_type
-                )
+                self._add_button(group_layout, button_config["text"], handler, action_type)
 
             group.setLayout(group_layout)
             tab_layout.addWidget(group)
@@ -1435,8 +1430,7 @@ class App(QtWidgets.QWidget):
                 else:
                     # Saved credentials failed - clear them and continue to prompt
                     self.output.setPlainText(
-                        "Saved credentials are no longer valid.\n"
-                        "Please enter your credentials..."
+                        "Saved credentials are no longer valid.\n" "Please enter your credentials..."
                     )
                     cred_mgr.clear_saved_credentials()
             except Exception:
