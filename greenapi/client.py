@@ -883,7 +883,7 @@ def get_group_data(api_url: str, instance_id: str, api_token: str, group_id: str
         api_token,
         "getGroupData",
         "POST",
-        json_body={"groupId": group_id},
+        json_body={"chatId": group_id},
     )
 
 
@@ -897,7 +897,7 @@ def add_group_participant(
         api_token,
         "addGroupParticipant",
         "POST",
-        json_body={"groupId": group_id, "participantChatId": participant_chat_id},
+        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
     )
 
 
@@ -911,7 +911,7 @@ def remove_group_participant(
         api_token,
         "removeGroupParticipant",
         "POST",
-        json_body={"groupId": group_id, "participantChatId": participant_chat_id},
+        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
     )
 
 
@@ -923,7 +923,7 @@ def set_group_admin(api_url: str, instance_id: str, api_token: str, group_id: st
         api_token,
         "setGroupAdmin",
         "POST",
-        json_body={"groupId": group_id, "participantChatId": participant_chat_id},
+        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
     )
 
 
@@ -935,7 +935,7 @@ def remove_group_admin(api_url: str, instance_id: str, api_token: str, group_id:
         api_token,
         "removeAdmin",
         "POST",
-        json_body={"groupId": group_id, "participantChatId": participant_chat_id},
+        json_body={"chatId": group_id, "participantChatId": participant_chat_id},
     )
 
 
@@ -947,7 +947,7 @@ def leave_group(api_url: str, instance_id: str, api_token: str, group_id: str) -
         api_token,
         "leaveGroup",
         "POST",
-        json_body={"groupId": group_id},
+        json_body={"chatId": group_id},
     )
 
 
@@ -967,7 +967,7 @@ def update_group_settings(
         "updateGroupSettings",
         "POST",
         json_body={
-            "groupId": group_id,
+            "chatId": group_id,
             "allowParticipantsEditGroupSettings": allow_participants_edit_settings,
             "allowParticipantsSendMessages": allow_participants_send_messages,
         },
