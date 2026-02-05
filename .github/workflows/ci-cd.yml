@@ -118,12 +118,23 @@ jobs:
         python update_version_info.py
         pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." --icon=NONE --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
 
-    - name: Calculate file hash
+    - name: Install NSIS
+      run: |
+        choco install nsis -y
+        
+    - name: Create NSIS Installer
+      run: |
+        makensis installer.nsi
+
+    - name: Calculate file hashes
       id: hash
       run: |
-        $hash = (Get-FileHash -Path "dist\greenapi-helper.exe" -Algorithm SHA256).Hash
-        echo "sha256=$hash" >> $env:GITHUB_OUTPUT
-        echo "SHA256: $hash" > dist\greenapi-helper.exe.sha256.txt
+        $exeHash = (Get-FileHash -Path "dist\greenapi-helper.exe" -Algorithm SHA256).Hash
+        $installerHash = (Get-FileHash -Path "dist\greenapi-helper-setup.exe" -Algorithm SHA256).Hash
+        echo "exe_sha256=$exeHash" >> $env:GITHUB_OUTPUT
+        echo "installer_sha256=$installerHash" >> $env:GITHUB_OUTPUT
+        echo "EXE SHA256: $exeHash" > dist\greenapi-helper.exe.sha256.txt
+        echo "Installer SHA256: $installerHash" > dist\greenapi-helper-setup.exe.sha256.txt
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -132,6 +143,8 @@ jobs:
         path: |
           dist/greenapi-helper.exe
           dist/greenapi-helper.exe.sha256.txt
+          dist/greenapi-helper-setup.exe
+          dist/greenapi-helper-setup.exe.sha256.txt
 
   release:
     runs-on: windows-latest
@@ -161,23 +174,34 @@ jobs:
         draft: false
         prerelease: false
         body: |
-          ## Download
+          ## Download Options
           
-          **⚠️ Windows Defender Warning**: This executable may be flagged by Windows Defender as it's built with PyInstaller and is unsigned. This is a false positive.
+          ### Option 1: Windows Installer (Recommended)
+          Download `greenapi-helper-setup.exe` - A proper Windows installer with:
+          - Start menu integration
+          - Desktop shortcut
+          - Clean uninstallation
+          - Less likely to trigger Windows Defender
           
-          **To run the application:**
-          1. Download `greenapi-helper.exe`
-          2. If Windows Defender blocks it, click "More info" → "Run anyway"
-          3. Or add to exclusions: Windows Security → Virus & threat protection → Exclusions
+          ### Option 2: Standalone Executable
+          Download `greenapi-helper.exe` if you prefer a portable version
+          
+          **⚠️ Windows Defender Note**: Both files may be flagged as they're unsigned. This is a false positive.
+          
+          **If Windows Defender blocks download/execution:**
+          1. Click "More info" → "Run anyway" when SmartScreen appears
+          2. Or add to exclusions: Windows Security → Virus & threat protection → Exclusions
           
           **Verify integrity:**
-          - SHA256: Download the `.sha256.txt` file to verify the executable hasn't been tampered with
+          - Download the corresponding `.sha256.txt` files to verify downloads haven't been tampered with
           
           **Alternative:** Run from source using Python (see README)
           
           ## What's Changed
           See the [full changelog](https://github.com/${{ github.repository }}/commits/v${{ steps.get_version.outputs.version }})
         files: |
+          greenapi-helper-setup.exe
+          greenapi-helper-setup.exe.sha256.txt
           greenapi-helper.exe
           greenapi-helper.exe.sha256.txt
       env:
