@@ -444,7 +444,9 @@ def ask_group_id(parent: QWidget, *, title: str = "Group ID", instance_type: str
     """
     is_max = instance_type == "max"
     group_placeholder = (
-        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+        "Group Chat ID (e.g. -10000000000000)"
+        if is_max
+        else "Group Chat ID (e.g. 120363123456789012 or 120363123456789012@g.us)"
     )
 
     dlg = FormDialog(
@@ -472,7 +474,9 @@ def ask_update_group_name(parent: QWidget, *, instance_type: str = "whatsapp"):
     """
     is_max = instance_type == "max"
     group_placeholder = (
-        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+        "Group Chat ID (e.g. -10000000000000)"
+        if is_max
+        else "Group Chat ID (e.g. 120363123456789012 or 120363123456789012@g.us)"
     )
 
     dlg = FormDialog(
@@ -507,7 +511,9 @@ def ask_group_participant(parent: QWidget, *, title: str = "Group Participant", 
     """
     is_max = instance_type == "max"
     group_placeholder = (
-        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+        "Group Chat ID (e.g. -10000000000000)"
+        if is_max
+        else "Group Chat ID (e.g. 120363123456789012 or 120363123456789012@g.us)"
     )
     participant_placeholder = (
         "Participant Chat ID (e.g. 10000000)" if is_max else "Participant Chat ID (e.g. 79001234568@c.us)"
@@ -545,7 +551,9 @@ def ask_group_settings(parent: QWidget, *, instance_type: str = "whatsapp"):
     """
     is_max = instance_type == "max"
     group_placeholder = (
-        "Group Chat ID (e.g. -10000000000000)" if is_max else "Group Chat ID (e.g. 120363123456789012@g.us)"
+        "Group Chat ID (e.g. -10000000000000)"
+        if is_max
+        else "Group Chat ID (e.g. 120363123456789012 or 120363123456789012@g.us)"
     )
 
     dlg = FormDialog(

@@ -47,6 +47,33 @@ def is_max_instance(api_url: str) -> bool:
     return "/v3" in api_url
 
 
+def normalize_group_id(group_id: str, api_url: str) -> str:
+    """Normalize group ID format by adding @g.us suffix if missing (for WhatsApp instances).
+
+    For MAX instances (with /v3 in URL), returns the group_id as-is.
+    For WhatsApp instances, ensures the group_id ends with @g.us.
+
+    Args:
+        group_id: The group ID to normalize (e.g., "120363426336228996" or "120363426336228996@g.us")
+        api_url: The API URL to determine instance type
+
+    Returns:
+        Normalized group ID (e.g., "120363426336228996@g.us" for WhatsApp)
+    """
+    if not group_id:
+        return group_id
+
+    # MAX instances use numeric group IDs without suffix
+    if is_max_instance(api_url):
+        return group_id
+
+    # WhatsApp instances require @g.us suffix
+    if not group_id.endswith("@g.us"):
+        return f"{group_id}@g.us"
+
+    return group_id
+
+
 def send_request(
     method: str,
     url: str,
@@ -865,18 +892,20 @@ def create_group(api_url: str, instance_id: str, api_token: str, group_name: str
 
 def update_group_name(api_url: str, instance_id: str, api_token: str, group_id: str, group_name: str) -> str:
     """Change the name of a group."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "updateGroupName",
         "POST",
-        json_body={"groupId": group_id, "groupName": group_name},
+        json_body={"chatId": group_id, "groupName": group_name},
     )
 
 
 def get_group_data(api_url: str, instance_id: str, api_token: str, group_id: str) -> str:
     """Get detailed information about a group."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -891,6 +920,7 @@ def add_group_participant(
     api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str
 ) -> str:
     """Add a participant to a group."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -905,6 +935,7 @@ def remove_group_participant(
     api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str
 ) -> str:
     """Remove a participant from a group."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -917,6 +948,7 @@ def remove_group_participant(
 
 def set_group_admin(api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str) -> str:
     """Grant admin rights to a group participant."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -929,6 +961,7 @@ def set_group_admin(api_url: str, instance_id: str, api_token: str, group_id: st
 
 def remove_group_admin(api_url: str, instance_id: str, api_token: str, group_id: str, participant_chat_id: str) -> str:
     """Remove admin rights from a group participant."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -941,6 +974,7 @@ def remove_group_admin(api_url: str, instance_id: str, api_token: str, group_id:
 
 def leave_group(api_url: str, instance_id: str, api_token: str, group_id: str) -> str:
     """Leave a group."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
@@ -960,6 +994,7 @@ def update_group_settings(
     allow_participants_send_messages: bool,
 ) -> str:
     """Update group settings (who can edit group info and send messages)."""
+    group_id = normalize_group_id(group_id, api_url)
     return make_api_call(
         api_url,
         instance_id,
