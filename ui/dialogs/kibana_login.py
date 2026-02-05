@@ -76,14 +76,14 @@ class KibanaLoginDialog(QDialog):
             self.password_input.setEchoMode(QLineEdit.Password)
 
     def _on_accept(self):
-        username = self.username_input.text().strip()
-        password = self.password_input.text().strip()
+        username = self.username_input.text()
+        password = self.password_input.text()
 
-        if not username or not password:
+        if not username.strip() or not password:
             QMessageBox.warning(self, "Missing Credentials", "Please enter both username and password.")
             return
 
-        self._username = username
+        self._username = username.strip()
         self._password = password
         self._remember_me = self.remember_checkbox.isChecked()
         self.accept()
