@@ -180,7 +180,7 @@ class InstanceSettingsDialog(QDialog):
     def payload(self) -> dict:
         data = {
             "webhookUrl": self.webhookUrl.text().strip(),
-            "webhookUrlToken": self.webhookUrlToken.text().strip(),
+            "webhookUrlToken": self.webhookUrlToken.text(),
             "delaySendMessagesMilliseconds": int(self.delaySendMessagesMilliseconds.value()),
         }
         for k in self._checks:
