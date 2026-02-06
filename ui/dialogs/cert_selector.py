@@ -153,7 +153,7 @@ class CertificateSelectorDialog(QDialog):
                     item.setData(Qt.UserRole, len(self._certificates) - 1)
                     self.cert_list.addItem(item)
 
-            # Hide loading indicator and show certificate list
+            # Hide loading indicator and show certificate listr
             self.loading_label.setVisible(False)
             self.cert_list.setVisible(True)
 

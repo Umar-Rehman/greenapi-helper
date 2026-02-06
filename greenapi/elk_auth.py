@@ -67,7 +67,12 @@ def get_kibana_session_cookie_with_password(
     password: str,
     cert_files: Optional[Tuple[str, str]] = None,
 ) -> Optional[str]:
-    """Authenticate to Kibana using username/password + cert and return session cookie."""
+    """Authenticate to Kibana using username/password + cert and return session cookie.
+
+    Returns:
+        Session cookie string if successful, None if authentication failed.
+        Check stderr for error details when debugging.
+    """
     if platform.system() != "Windows":
         return None
     return _try_kibana_auth_powershell_login(username, password, cert_files)
@@ -163,17 +168,82 @@ def _try_kibana_auth_powershell_login(
 ) -> Optional[str]:
     """Use PowerShell to log into Kibana with username/password and cert-store auth."""
     try:
+        import sys
+
         thumbprint = _get_thumbprint_from_cert_files(cert_files)
         if not thumbprint:
+            print("DEBUG: No certificate thumbprint found", file=sys.stderr)
             return None
 
         provider_name = os.getenv("KIBANA_PROVIDER_NAME", "basic")
         provider_type = os.getenv("KIBANA_PROVIDER_TYPE", "basic")
 
+        # Verify certificate exists in store with PowerShell
+        verify_script = f"""
+$thumb = '{thumbprint}'
+$cert = Get-Item -Path "Cert:\\CurrentUser\\My\\$thumb" -ErrorAction SilentlyContinue
+if ($cert) {{
+    Write-Output "FOUND|$($cert.HasPrivateKey)|$($cert.Subject)"
+}} else {{
+    Write-Output "NOT_FOUND"
+}}
+"""
+        verify_result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", verify_script],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+
+        cert_status = verify_result.stdout.strip()
+        if cert_status.startswith("FOUND"):
+            parts = cert_status.split("|")
+            has_key = parts[1] if len(parts) > 1 else "Unknown"
+            subject = parts[2] if len(parts) > 2 else "Unknown"
+            cert_valid = f"✓ Found (HasPrivateKey: {has_key}, Subject: {subject})"
+        else:
+            cert_valid = "✗ NOT FOUND in CurrentUser\\My store"
+
+        # Print debug information about the authentication attempt
+        print("\n=== DEBUG: Kibana Authentication Request ===", file=sys.stderr)
+        print(f"Certificate Thumbprint: {thumbprint}", file=sys.stderr)
+        print(f"Certificate Status: {cert_valid}", file=sys.stderr)
+        print(f"Kibana URL: {KIBANA_URL}", file=sys.stderr)
+        print(f"Username: {username}", file=sys.stderr)
+        print(f"Password: {password}", file=sys.stderr)
+        print(f"Provider: {provider_type}/{provider_name}", file=sys.stderr)
+        print("Endpoints to try: /internal/security/login, /api/security/v1/login", file=sys.stderr)
+        print("==========================================\n", file=sys.stderr)
+
         script = f"""
 $ErrorActionPreference = 'Stop'
 $thumb = '{thumbprint}'
-$cert = Get-Item -Path ('Cert:\\CurrentUser\\My\\' + $thumb) -ErrorAction Stop
+
+# Try to get certificate and provide detailed error info
+try {{
+    $cert = Get-Item -Path ('Cert:\\CurrentUser\\My\\' + $thumb) -ErrorAction Stop
+    
+    # Check if certificate has a private key
+    if (-not $cert.HasPrivateKey) {{
+        Write-Error "Certificate found but has no private key. Thumbprint: $thumb"
+        exit 1
+    }}
+    
+}} catch {{
+    # Certificate not found - provide detailed error
+    Write-Error "Certificate not found in CurrentUser\\My store. Thumbprint: $thumb. Error: $_"
+    
+    # List available certificates for debugging
+    $availableCerts = Get-ChildItem -Path Cert:\\CurrentUser\\My | Select-Object -First 5 Thumbprint, Subject
+    if ($availableCerts) {{
+        Write-Error "Available certificates (first 5): $($availableCerts | Out-String)"
+    }} else {{
+        Write-Error "No certificates found in CurrentUser\\My store"
+    }}
+    exit 1
+}}
+
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $base = '{KIBANA_URL}'
 $headers = @{{ 'kbn-xsrf' = 'true'; 'Content-Type' = 'application/json' }}
@@ -194,10 +264,19 @@ try {{
         -Method POST -Body $body -Headers $headers `
         -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
 }} catch {{
+    # Try fallback endpoint
     $body2 = @{{ username = $user; password = $pass }} | ConvertTo-Json
-    Invoke-WebRequest -Uri ($base + '/api/security/v1/login') `
-        -Method POST -Body $body2 -Headers $headers `
-        -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
+    try {{
+        Invoke-WebRequest -Uri ($base + '/api/security/v1/login') `
+            -Method POST -Body $body2 -Headers $headers `
+            -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
+    }} catch {{
+        # Both endpoints failed - provide error details
+        $statusCode = $_.Exception.Response.StatusCode.value__
+        $statusDesc = $_.Exception.Response.StatusDescription
+        Write-Error "Kibana login failed. Status: $statusCode $statusDesc. Error: $_"
+        exit 1
+    }}
 }}
 
 $paths = @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})
@@ -227,15 +306,73 @@ foreach ($p in $paths) {{
         )
 
         if result.returncode != 0:
+            # Extract just the actual error messages
+            import sys
+
+            stderr = result.stderr.strip() if result.stderr else ""
+
+            # Look for the actual executed Write-Error output (appears at the end)
+            # Format: "Write-Error : <actual error message>"
+            error_lines = []
+            for line in stderr.split("\n"):
+                # Skip the script echo and only get actual error output
+                if line.strip().startswith("Write-Error :"):
+                    # Extract the actual error message after "Write-Error :"
+                    msg = line.split("Write-Error :", 1)[1].strip()
+                    # Skip if it's just quoting the Write-Error command from script
+                    if not msg.startswith('"') and msg:
+                        # Clean up the message
+                        msg = msg.lstrip(": ")
+                        error_lines.append(msg)
+
+            # If no Write-Error lines found, look for other error indicators
+            if not error_lines:
+                for line in stderr.split("\n"):
+                    if any(keyword in line for keyword in ["Kibana login failed", "Status:", "Unauthorized"]):
+                        # Make sure it's not part of the script text
+                        if not line.strip().startswith(("Write-Error", "$", "#", "At line:", "CategoryInfo", "+")):
+                            error_lines.append(line.strip())
+
+            if error_lines:
+                print("Kibana authentication failed:", file=sys.stderr)
+                # Show only unique, meaningful errors (first 2)
+                seen = set()
+                for msg in error_lines[:2]:
+                    if msg and msg not in seen and len(msg) > 10:
+                        seen.add(msg)
+                        # Parse and improve the error message
+                        if "404" in msg and "Not Found" in msg:
+                            print(
+                                "  • Login endpoints not found (404). "
+                                "Your Kibana version may use different authentication endpoints.",
+                                file=sys.stderr,
+                            )
+                        elif "401" in msg or "Unauthorized" in msg:
+                            print("  • Invalid username or password (401 Unauthorized)", file=sys.stderr)
+                        elif "403" in msg or "Forbidden" in msg:
+                            print("  • Access forbidden (403). Check user permissions.", file=sys.stderr)
+                        else:
+                            print(f"  • {msg}", file=sys.stderr)
+            else:
+                # Generic fallback if we can't parse specific error
+                print("Kibana authentication failed: Invalid username or password", file=sys.stderr)
+
             return None
 
         cookie = (result.stdout or "").strip()
         if cookie:
             return cookie
 
+        # No cookie returned - log this for debugging
+        import sys
+
+        print("Kibana login: No session cookie returned after successful authentication", file=sys.stderr)
         return None
 
-    except Exception:
+    except Exception as e:
+        import sys
+
+        print(f"Kibana login exception: {type(e).__name__}: {e}", file=sys.stderr)
         return None
 
 

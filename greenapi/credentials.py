@@ -7,6 +7,7 @@ import os
 import subprocess
 import secrets
 import keyring
+import time
 from pathlib import Path
 from typing import Optional
 import atexit
@@ -27,6 +28,9 @@ class CredentialManager:
         self._temp_key_file: Optional[Path] = None
         self._kibana_cookie: Optional[str] = None
         self._temp_dir: Optional[str] = None
+
+        # Clean up old temp directories from previous sessions
+        self._cleanup_old_temp_dirs()
 
         # Register cleanup
         atexit.register(self.cleanup)
@@ -330,6 +334,34 @@ class CredentialManager:
                 self._temp_dir = None
 
         except Exception:
+            pass
+
+    def _cleanup_old_temp_dirs(self):
+        """Clean up old greenapi temp directories from previous sessions.
+
+        Removes temp directories older than 1 hour to handle cases where
+        the app crashed or was force-closed without running cleanup.
+        """
+        try:
+            import shutil
+
+            temp_base = Path(tempfile.gettempdir())
+            current_time = time.time()
+            one_hour_ago = current_time - 3600
+
+            # Find all greenapi_ temp directories
+            for item in temp_base.glob("greenapi_*"):
+                if item.is_dir():
+                    try:
+                        # Check if directory is older than 1 hour
+                        dir_mtime = os.path.getmtime(item)
+                        if dir_mtime < one_hour_ago:
+                            shutil.rmtree(item, ignore_errors=True)
+                    except (OSError, PermissionError):
+                        # Skip if we can't access or delete
+                        pass
+        except Exception:
+            # Don't fail if cleanup fails
             pass
 
     def clear(self, clear_saved=False):
