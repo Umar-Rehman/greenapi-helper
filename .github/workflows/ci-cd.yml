@@ -141,7 +141,7 @@ jobs:
 
     - name: Create helper ZIP archive
       run: |
-        Compress-Archive -Path "dist\greenapi-helper.exe","version.json" -DestinationPath "dist\greenapi-helper.zip"
+        Compress-Archive -Path "dist\greenapi-helper\*" -DestinationPath "dist\greenapi-helper.zip"
 
     - name: Create installer ZIP archive
       run: |
@@ -154,7 +154,6 @@ jobs:
         path: |
           dist/greenapi-helper-installer.exe
           dist/greenapi-helper-installer.zip
-          dist/greenapi-helper.exe
           dist/greenapi-helper.zip
 
   release:
@@ -193,9 +192,8 @@ jobs:
           - **greenapi-helper-installer.exe** - Full installer with start menu integration and desktop shortcut
           - **greenapi-helper-installer.zip** - Same installer in ZIP format (if .exe is blocked by browser)
           
-          ### 📦 Portable Versions
-          - **greenapi-helper.exe** - Standalone executable, run anywhere
-          - **greenapi-helper.zip** - Portable package (includes executable + version file)
+          ### 📦 Portable Version
+          - **greenapi-helper.zip** - Portable package (extract and run greenapi-helper.exe from folder)
           
           **⚠️ Windows Defender Note**: Files may be flagged as unsigned. This is a false positive.
           
@@ -206,7 +204,6 @@ jobs:
         files: |
           greenapi-helper-installer.exe
           greenapi-helper-installer.zip
-          greenapi-helper.exe
           greenapi-helper.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
