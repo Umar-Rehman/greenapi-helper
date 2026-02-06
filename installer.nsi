@@ -2,7 +2,7 @@
 ; This script creates a Windows installer for the Green API Helper application
 
 !define APP_NAME "Green API Helper"
-!define APP_VERSION "1.9.1"
+!define APP_VERSION "1.9.4"
 !define APP_PUBLISHER "Umar Rehman"
 !define APP_URL "https://github.com/Umar-Rehman/greenapi-helper"
 !define APP_EXE "greenapi-helper.exe"
@@ -53,11 +53,8 @@ VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 Section "Install" SecInstall
   SetOutPath "$INSTDIR"
   
-  ; Copy the executable
-  File "dist\${APP_EXE}"
-  
-  ; Copy version file
-  File "version.json"
+  ; Copy the application folder (onedir build)
+  File /r "dist\greenapi-helper\*.*"
   
   ; Create start menu shortcuts
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
@@ -89,7 +86,6 @@ SectionEnd
 Section "Uninstall"
   ; Remove files
   Delete "$INSTDIR\${APP_EXE}"
-  Delete "$INSTDIR\version.json"
   Delete "$INSTDIR\Uninstall.exe"
   
   ; Remove shortcuts
@@ -99,7 +95,7 @@ Section "Uninstall"
   Delete "$DESKTOP\${APP_NAME}.lnk"
   
   ; Remove installation directory
-  RMDir "$INSTDIR"
+  RMDir /r "$INSTDIR"
   
   ; Remove registry keys
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${INSTALL_DIR_NAME}"

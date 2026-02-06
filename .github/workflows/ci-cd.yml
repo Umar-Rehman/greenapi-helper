@@ -116,7 +116,17 @@ jobs:
     - name: Create executable with PyInstaller
       run: |
         python update_version_info.py
-        pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --icon ui/greenapiicon.ico --add-data "ui;ui" --add-data "version.json;." --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
+        pyinstaller greenapi-helper.spec
+
+    # - name: Code sign executable (optional)
+    #   if: ${{ secrets.SIGNING_PFX_B64 != '' && secrets.SIGNING_PFX_PASSWORD != '' }}
+    #   shell: pwsh
+    #   run: |
+    #     $pfxPath = "${{ runner.temp }}\signing-cert.pfx"
+    #     [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String("${{ secrets.SIGNING_PFX_B64 }}"))
+    #     $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Select-Object -First 1
+    #     if (-not $signtool) { throw "signtool.exe not found" }
+    #     & $signtool.FullName sign /f $pfxPath /p "${{ secrets.SIGNING_PFX_PASSWORD }}" /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist\greenapi-helper\greenapi-helper.exe"
 
     - name: Install NSIS
       run: |
