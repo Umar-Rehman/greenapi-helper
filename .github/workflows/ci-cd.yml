@@ -116,7 +116,17 @@ jobs:
     - name: Create executable with PyInstaller
       run: |
         python update_version_info.py
-        pyinstaller --onefile --windowed --name greenapi-helper --version-file version_info.txt --icon ui/greenapiicon.ico --add-data "ui;ui" --add-data "version.json;." --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --upx-dir=. app/main.py
+        pyinstaller greenapi-helper.spec
+
+    # - name: Code sign executable (optional)
+    #   if: ${{ secrets.SIGNING_PFX_B64 != '' && secrets.SIGNING_PFX_PASSWORD != '' }}
+    #   shell: pwsh
+    #   run: |
+    #     $pfxPath = "${{ runner.temp }}\signing-cert.pfx"
+    #     [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String("${{ secrets.SIGNING_PFX_B64 }}"))
+    #     $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Select-Object -First 1
+    #     if (-not $signtool) { throw "signtool.exe not found" }
+    #     & $signtool.FullName sign /f $pfxPath /p "${{ secrets.SIGNING_PFX_PASSWORD }}" /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist\greenapi-helper\greenapi-helper.exe"
 
     - name: Install NSIS
       run: |
@@ -131,7 +141,7 @@ jobs:
 
     - name: Create helper ZIP archive
       run: |
-        Compress-Archive -Path "dist\greenapi-helper.exe","version.json" -DestinationPath "dist\greenapi-helper.zip"
+        Compress-Archive -Path "dist\greenapi-helper\*" -DestinationPath "dist\greenapi-helper.zip"
 
     - name: Create installer ZIP archive
       run: |
@@ -144,7 +154,6 @@ jobs:
         path: |
           dist/greenapi-helper-installer.exe
           dist/greenapi-helper-installer.zip
-          dist/greenapi-helper.exe
           dist/greenapi-helper.zip
 
   release:
@@ -183,9 +192,8 @@ jobs:
           - **greenapi-helper-installer.exe** - Full installer with start menu integration and desktop shortcut
           - **greenapi-helper-installer.zip** - Same installer in ZIP format (if .exe is blocked by browser)
           
-          ### 📦 Portable Versions
-          - **greenapi-helper.exe** - Standalone executable, run anywhere
-          - **greenapi-helper.zip** - Portable package (includes executable + version file)
+          ### 📦 Portable Version
+          - **greenapi-helper.zip** - Portable package (extract and run greenapi-helper.exe from folder)
           
           **⚠️ Windows Defender Note**: Files may be flagged as unsigned. This is a false positive.
           
@@ -196,7 +204,6 @@ jobs:
         files: |
           greenapi-helper-installer.exe
           greenapi-helper-installer.zip
-          greenapi-helper.exe
           greenapi-helper.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

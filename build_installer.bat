@@ -13,9 +13,9 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 REM Check if executable exists
-if not exist "dist\greenapi-helper.exe" (
-    echo ERROR: dist\greenapi-helper.exe not found
-    echo Please build the executable first using PyInstaller
+if not exist "dist\greenapi-helper\greenapi-helper.exe" (
+    echo ERROR: dist\greenapi-helper\greenapi-helper.exe not found
+    echo Please build the executable first using PyInstaller (onedir)
     pause
     exit /b 1
 )
