@@ -40,25 +40,30 @@ def get_kibana_session_cookie(
     if platform.system() == "Windows":
         cookie = _try_kibana_auth_winhttp(cert_files)
         if cookie:
+            print("Strategy 1 (WinHTTP cert auth) succeeded")
             return cookie
 
     # Strategy 2: Try Windows PowerShell with cert from store (no key export)
     if platform.system() == "Windows":
         cookie = _try_kibana_auth_powershell(cert_files)
         if cookie:
+            print("Strategy 2 (PowerShell cert auth) succeeded")
             return cookie
 
     # Strategy 3: Try certificate-only mode (let Windows/SSL handle the key)
     cookie = _try_kibana_auth_cert_only(cert_files)
     if cookie:
+        print("Strategy 3 (Cert-only auth) succeeded")
         return cookie
 
     # Strategy 4: Try with full private key export
     cookie = _try_kibana_auth_with_key(cert_files)
     if cookie:
+        print("Strategy 4 (Cert with key export) succeeded")
         return cookie
 
     # Strategy 3: Failed - return None for fallback to manual entry
+    print("All authentication strategies failed - please enter Kibana session cookie manually.")
     return None
 
 
@@ -125,10 +130,11 @@ $ErrorActionPreference = 'Stop'
 $thumb = '{thumbprint}'
 $cert = Get-Item -Path ('Cert:\\CurrentUser\\My\\' + $thumb) -ErrorAction Stop
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-$paths = @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})
-foreach ($p in $paths) {{
+$auth_paths = @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})
+foreach ($p in $auth_paths) {{
     $uri = '{KIBANA_URL}' + $p
-    $resp = Invoke-WebRequest -Uri $uri -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10
+    $resp = Invoke-WebRequest -Uri $uri -Certificate $cert `
+        -WebSession $session -UseBasicParsing -TimeoutSec 10
     $cookies = $session.Cookies.GetCookies([Uri]$uri)
     if ($cookies.Count -gt 0) {{
         ($cookies | ForEach-Object {{ "$($_.Name)=$($_.Value)" }}) -join '; '
@@ -172,20 +178,20 @@ def _try_kibana_auth_powershell_login(
 
         thumbprint = _get_thumbprint_from_cert_files(cert_files)
         if not thumbprint:
-            print("DEBUG: No certificate thumbprint found", file=sys.stderr)
+            print("No certificate thumbprint found", file=sys.stderr)
             return None
 
         provider_name = os.getenv("KIBANA_PROVIDER_NAME", "basic")
         provider_type = os.getenv("KIBANA_PROVIDER_TYPE", "basic")
 
-        # Verify certificate exists in store with PowerShell
+        # Verify certificate exists in store before attempting authentication
         verify_script = f"""
 $thumb = '{thumbprint}'
 $cert = Get-Item -Path "Cert:\\CurrentUser\\My\\$thumb" -ErrorAction SilentlyContinue
-if ($cert) {{
-    Write-Output "FOUND|$($cert.HasPrivateKey)|$($cert.Subject)"
+if ($cert -and $cert.HasPrivateKey) {{
+    Write-Output "VALID"
 }} else {{
-    Write-Output "NOT_FOUND"
+    Write-Output "INVALID"
 }}
 """
         verify_result = subprocess.run(
@@ -196,87 +202,99 @@ if ($cert) {{
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
-        cert_status = verify_result.stdout.strip()
-        if cert_status.startswith("FOUND"):
-            parts = cert_status.split("|")
-            has_key = parts[1] if len(parts) > 1 else "Unknown"
-            subject = parts[2] if len(parts) > 2 else "Unknown"
-            cert_valid = f"✓ Found (HasPrivateKey: {has_key}, Subject: {subject})"
-        else:
-            cert_valid = "✗ NOT FOUND in CurrentUser\\My store"
+        if verify_result.stdout.strip() != "VALID":
+            import sys
 
-        # Print debug information about the authentication attempt
-        print("\n=== DEBUG: Kibana Authentication Request ===", file=sys.stderr)
-        print(f"Certificate Thumbprint: {thumbprint}", file=sys.stderr)
-        print(f"Certificate Status: {cert_valid}", file=sys.stderr)
-        print(f"Kibana URL: {KIBANA_URL}", file=sys.stderr)
-        print(f"Username: {username}", file=sys.stderr)
-        print(f"Password: {password}", file=sys.stderr)
-        print(f"Provider: {provider_type}/{provider_name}", file=sys.stderr)
-        print("Endpoints to try: /internal/security/login, /api/security/v1/login", file=sys.stderr)
-        print("==========================================\n", file=sys.stderr)
+            print(
+                "Certificate not found or missing private key in CurrentUser\\My store",
+                file=sys.stderr,
+            )
+            return None
+
+        # Base64 encode credentials to bypass encoding issues
+        import base64
+
+        username_b64 = base64.b64encode(username.encode("utf-8")).decode("ascii")
+        password_b64 = base64.b64encode(password.encode("utf-8")).decode("ascii")
+        provider_type_b64 = base64.b64encode(provider_type.encode("utf-8")).decode("ascii")
+        provider_name_b64 = base64.b64encode(provider_name.encode("utf-8")).decode("ascii")
 
         script = f"""
 $ErrorActionPreference = 'Stop'
 $thumb = '{thumbprint}'
 
-# Try to get certificate and provide detailed error info
 try {{
     $cert = Get-Item -Path ('Cert:\\CurrentUser\\My\\' + $thumb) -ErrorAction Stop
-    
-    # Check if certificate has a private key
+
     if (-not $cert.HasPrivateKey) {{
         Write-Error "Certificate found but has no private key. Thumbprint: $thumb"
         exit 1
     }}
-    
 }} catch {{
-    # Certificate not found - provide detailed error
     Write-Error "Certificate not found in CurrentUser\\My store. Thumbprint: $thumb. Error: $_"
-    
-    # List available certificates for debugging
-    $availableCerts = Get-ChildItem -Path Cert:\\CurrentUser\\My | Select-Object -First 5 Thumbprint, Subject
-    if ($availableCerts) {{
-        Write-Error "Available certificates (first 5): $($availableCerts | Out-String)"
-    }} else {{
-        Write-Error "No certificates found in CurrentUser\\My store"
-    }}
     exit 1
 }}
 
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $base = '{KIBANA_URL}'
-$headers = @{{ 'kbn-xsrf' = 'true'; 'Content-Type' = 'application/json' }}
-$user = $env:KIBANA_USER
-$pass = $env:KIBANA_PASS
-$ptype = $env:KIBANA_PROVIDER_TYPE
-$pname = $env:KIBANA_PROVIDER_NAME
+$headers = @{{ 'kbn-xsrf' = 'true'; 'Content-Type' = 'application/json; charset=utf-8' }}
+$user = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{username_b64}'))
+$pass = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{password_b64}'))
+$ptype = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{provider_type_b64}'))
+$pname = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{provider_name_b64}'))
 
-$body = @{{
-    providerType = $ptype
-    providerName = $pname
-    currentURL = "$base/app/home"
-    params = @{{ username = $user; password = $pass }}
-}} | ConvertTo-Json -Depth 6
+$certUser = $null
+if ($cert.Subject -match 'CN=([^,]+)') {{
+    $certUser = $Matches[1]
+}}
 
-try {{
-    Invoke-WebRequest -Uri ($base + '/internal/security/login') `
-        -Method POST -Body $body -Headers $headers `
-        -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
-}} catch {{
-    # Try fallback endpoint
-    $body2 = @{{ username = $user; password = $pass }} | ConvertTo-Json
+$userCandidates = @($user)
+if ($certUser -and $certUser -ne $user) {{
+    $userCandidates += $certUser
+}}
+
+$loginSucceeded = $false
+$lastStatusCode = $null
+$lastStatusDesc = $null
+foreach ($u in $userCandidates) {{
+    $body = @{{
+        providerType = $ptype
+        providerName = $pname
+        currentURL = "$base/app/home"
+        params = @{{ username = $u; password = $pass }}
+    }} | ConvertTo-Json -Depth 6
+    $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+
+    try {{
+        Invoke-WebRequest -Uri ($base + '/internal/security/login') `
+            -Method POST -Body $bodyBytes -Headers $headers -ContentType 'application/json; charset=utf-8' `
+            -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
+        $loginSucceeded = $true
+        break
+    }} catch {{
+        $lastStatusCode = $_.Exception.Response.StatusCode.value__
+        $lastStatusDesc = $_.Exception.Response.StatusDescription
+    }}
+
+    $body2 = @{{ username = $u; password = $pass }} | ConvertTo-Json
+    $body2Bytes = [System.Text.Encoding]::UTF8.GetBytes($body2)
     try {{
         Invoke-WebRequest -Uri ($base + '/api/security/v1/login') `
-            -Method POST -Body $body2 -Headers $headers `
+            -Method POST -Body $body2Bytes -Headers $headers -ContentType 'application/json; charset=utf-8' `
             -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 10 | Out-Null
+        $loginSucceeded = $true
+        break
     }} catch {{
-        # Both endpoints failed - provide error details
-        $statusCode = $_.Exception.Response.StatusCode.value__
-        $statusDesc = $_.Exception.Response.StatusDescription
-        Write-Error "Kibana login failed. Status: $statusCode $statusDesc. Error: $_"
-        exit 1
+        $lastStatusCode = $_.Exception.Response.StatusCode.value__
+        $lastStatusDesc = $_.Exception.Response.StatusDescription
     }}
+}}
+
+if (-not $loginSucceeded) {{
+    $statusCode = if ($lastStatusCode) {{ $lastStatusCode }} else {{ 'Unknown' }}
+    $statusDesc = if ($lastStatusDesc) {{ $lastStatusDesc }} else {{ 'Unknown' }}
+    Write-Error "Kibana login failed. Status: $statusCode $statusDesc."
+    exit 1
 }}
 
 $paths = @({', '.join([f"'{p}'" for p in KIBANA_AUTH_PATHS])})
@@ -290,18 +308,12 @@ foreach ($p in $paths) {{
 }}
 """
 
-        env = os.environ.copy()
-        env["KIBANA_USER"] = username
-        env["KIBANA_PASS"] = password
-        env["KIBANA_PROVIDER_TYPE"] = provider_type
-        env["KIBANA_PROVIDER_NAME"] = provider_name
-
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", script],
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
             capture_output=True,
             text=True,
             timeout=20,
-            env=env,
+            encoding="utf-8",
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
@@ -328,9 +340,19 @@ foreach ($p in $paths) {{
             # If no Write-Error lines found, look for other error indicators
             if not error_lines:
                 for line in stderr.split("\n"):
-                    if any(keyword in line for keyword in ["Kibana login failed", "Status:", "Unauthorized"]):
+                    keywords = ["Kibana login failed", "Status:", "Unauthorized"]
+                    if any(keyword in line for keyword in keywords):
                         # Make sure it's not part of the script text
-                        if not line.strip().startswith(("Write-Error", "$", "#", "At line:", "CategoryInfo", "+")):
+                        skip_prefixes = (
+                            "Write-Error",
+                            "Write-Host",
+                            "$",
+                            "#",
+                            "At line:",
+                            "CategoryInfo",
+                            "+",
+                        )
+                        if not line.strip().startswith(skip_prefixes):
                             error_lines.append(line.strip())
 
             if error_lines:
@@ -340,7 +362,6 @@ foreach ($p in $paths) {{
                 for msg in error_lines[:2]:
                     if msg and msg not in seen and len(msg) > 10:
                         seen.add(msg)
-                        # Parse and improve the error message
                         if "404" in msg and "Not Found" in msg:
                             print(
                                 "  • Login endpoints not found (404). "
@@ -348,14 +369,22 @@ foreach ($p in $paths) {{
                                 file=sys.stderr,
                             )
                         elif "401" in msg or "Unauthorized" in msg:
-                            print("  • Invalid username or password (401 Unauthorized)", file=sys.stderr)
+                            print(
+                                "  • Invalid username or password (401 Unauthorized)",
+                                file=sys.stderr,
+                            )
                         elif "403" in msg or "Forbidden" in msg:
-                            print("  • Access forbidden (403). Check user permissions.", file=sys.stderr)
+                            print(
+                                "  • Access forbidden (403). Check user permissions.",
+                                file=sys.stderr,
+                            )
                         else:
                             print(f"  • {msg}", file=sys.stderr)
             else:
-                # Generic fallback if we can't parse specific error
-                print("Kibana authentication failed: Invalid username or password", file=sys.stderr)
+                print(
+                    "Kibana authentication failed: Invalid username or password",
+                    file=sys.stderr,
+                )
 
             return None
 
@@ -363,10 +392,10 @@ foreach ($p in $paths) {{
         if cookie:
             return cookie
 
-        # No cookie returned - log this for debugging
-        import sys
-
-        print("Kibana login: No session cookie returned after successful authentication", file=sys.stderr)
+        print(
+            "Kibana login: No session cookie returned after successful authentication",
+            file=sys.stderr,
+        )
         return None
 
     except Exception as e:
@@ -509,7 +538,8 @@ def get_api_token(
     Returns:
         The API token string, or error message if not found
     """
-    token_re = re.compile(rf"(?:/| )waInstance{re.escape(instance_id)}/[A-Za-z]+/([a-fA-F0-9]{{32,}})")
+    token_pattern = rf"(?:/| )waInstance{re.escape(instance_id)}/[A-Za-z]+/([a-fA-F0-9]{{32,}})"
+    token_re = re.compile(token_pattern)
 
     proxy_url = f"{KIBANA_URL}/api/console/proxy"
 
