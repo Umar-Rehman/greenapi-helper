@@ -113,10 +113,14 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Create executable with PyInstaller
+    - name: Create folder-based executable with PyInstaller
       run: |
         python update_version_info.py
         pyinstaller greenapi-helper.spec
+
+    - name: Create single-file executable with PyInstaller
+      run: |
+        pyinstaller --onefile --noconsole --icon ui/greenapiicon.ico --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." app/main.py
 
     # - name: Code sign executable (optional)
     #   if: ${{ secrets.SIGNING_PFX_B64 != '' && secrets.SIGNING_PFX_PASSWORD != '' }}
@@ -156,6 +160,7 @@ jobs:
           dist/greenapi-helper-installer.exe
           dist/greenapi-helper-installer.zip
           dist/greenapi-helper.zip
+          dist/greenapi-helper/
 
   release:
     runs-on: windows-latest
@@ -207,5 +212,6 @@ jobs:
           greenapi-helper-installer.exe
           greenapi-helper-installer.zip
           greenapi-helper.zip
+          greenapi-helper/
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
