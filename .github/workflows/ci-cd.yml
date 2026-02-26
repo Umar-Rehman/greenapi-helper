@@ -120,7 +120,11 @@ jobs:
 
     - name: Create single-file executable with PyInstaller
       run: |
-        pyinstaller --onefile --noconsole --icon ui/greenapiicon.ico --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." app/main.py
+        pyinstaller --onefile --noconsole --icon ui/greenapiicon.ico --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." --name greenapi-helper app/main.py
+
+    - name: Ensure greenapi-helper.exe is present for release
+      run: |
+        if (!(Test-Path "dist/greenapi-helper.exe")) { throw 'greenapi-helper.exe not found after build!' }
 
     # - name: Code sign executable (optional)
     #   if: ${{ secrets.SIGNING_PFX_B64 != '' && secrets.SIGNING_PFX_PASSWORD != '' }}
