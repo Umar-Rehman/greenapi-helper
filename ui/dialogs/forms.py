@@ -395,6 +395,123 @@ def ask_check_max(parent: QWidget, *, phone_default: str | None = None):
     return vals["phoneNumber"], vals["force"]
 
 
+# Telegram Authentication dialog helpers
+
+
+def ask_start_authorization(parent: QWidget, *, phone_default: str | None = None):
+    """Ask for phone number to start Telegram authorization.
+
+    Returns None if cancelled, otherwise returns phone number string.
+    """
+
+    def _validator(values: dict[str, Any]) -> str | None:
+        return validate_phone_number(values.get("phoneNumber", ""))
+
+    dlg = FormDialog(
+        "Start Telegram Authorization",
+        fields=[
+            TextField(
+                key="phoneNumber",
+                label="Phone number:",
+                default=str(phone_default or ""),
+                placeholder="e.g. 79876543210 (include country code)",
+                required=True,
+                min_width=420,
+            )
+        ],
+        parent=parent,
+        first_focus_key="phoneNumber",
+        min_width=480,
+        fusion=False,
+        validator=_validator,
+    )
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return dlg.values()["phoneNumber"]
+
+
+def ask_send_authorization_code(parent: QWidget):
+    """Ask for Telegram authorization code and optional 2FA password.
+
+    Returns None if cancelled, otherwise returns tuple (code: str, password: str | None).
+    """
+
+    def _validator(values: dict[str, Any]) -> str | None:
+        code = values.get("code", "").strip()
+        if not code:
+            return "Authorization code is required."
+        if not code.isdigit():
+            return "Authorization code must contain only digits."
+        return None
+
+    dlg = FormDialog(
+        "Send Authorization Code",
+        fields=[
+            TextField(
+                key="code",
+                label="Verification code:",
+                default="",
+                placeholder="e.g. 12345",
+                required=True,
+                min_width=320,
+            ),
+            TextField(
+                key="password",
+                label="2FA password (optional):",
+                default="",
+                placeholder="Leave empty if 2FA not enabled",
+                required=False,
+                min_width=320,
+            ),
+        ],
+        parent=parent,
+        first_focus_key="code",
+        min_width=480,
+        fusion=False,
+        validator=_validator,
+    )
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    vals = dlg.values()
+    password = vals.get("password", "").strip() or None
+    return vals["code"], password
+
+
+def ask_send_authorization_password(parent: QWidget):
+    """Ask for Telegram 2FA password.
+
+    Returns None if cancelled, otherwise returns password string.
+    """
+
+    def _validator(values: dict[str, Any]) -> str | None:
+        password = values.get("password", "").strip()
+        if not password:
+            return "2FA password is required."
+        return None
+
+    dlg = FormDialog(
+        "Send 2FA Password",
+        fields=[
+            TextField(
+                key="password",
+                label="2FA password:",
+                default="",
+                placeholder="Enter your two-factor authentication password",
+                required=True,
+                min_width=420,
+            )
+        ],
+        parent=parent,
+        first_focus_key="password",
+        min_width=480,
+        fusion=False,
+        validator=_validator,
+    )
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    return dlg.values()["password"]
+
+
 # Group dialog helpers
 
 

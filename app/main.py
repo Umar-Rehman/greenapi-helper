@@ -349,12 +349,19 @@ class App(QtWidgets.QWidget):
         root.addWidget(tabs)
 
     def _create_tab_from_config(self, tabs, tab_name):
-        """Create a tab dynamically from configuration.
+        """Create a tab dynamically from configuration with scroll support.
 
         Args:
             tabs: QTabWidget to add the tab to.
             tab_name: Name of the tab from TAB_CONFIG.
         """
+        # Create scroll area for tab content
+        scroll_area = QtWidgets.QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll_area.setMinimumHeight(500)  # Make button section taller
+
+        # Create content widget that will be scrollable
         tab_widget = QtWidgets.QWidget()
         tab_layout = QtWidgets.QVBoxLayout(tab_widget)
 
@@ -377,7 +384,12 @@ class App(QtWidgets.QWidget):
             tab_layout.addWidget(group)
 
         tab_layout.addStretch(1)
-        tabs.addTab(tab_widget, tab_name)
+
+        # Set the content widget inside scroll area
+        scroll_area.setWidget(tab_widget)
+
+        # Add scroll area as the tab
+        tabs.addTab(scroll_area, tab_name)
 
     def _create_history_panel(self, root):
         """Create request history panel at bottom of left side."""
@@ -399,7 +411,7 @@ class App(QtWidgets.QWidget):
 
         # History list
         self.history_list = QtWidgets.QListWidget()
-        self.history_list.setMaximumHeight(150)
+        self.history_list.setMaximumHeight(90)  # Reduce history section height
         self.history_list.setAlternatingRowColors(True)
         self.history_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.history_list.customContextMenuRequested.connect(self._show_history_context_menu)
@@ -885,6 +897,26 @@ class App(QtWidgets.QWidget):
 
         # Known WhatsApp prefixes (from api_url_resolver - RULES_EXACT and RULES_PREFIX)
         whatsapp_prefixes = ("11", "22", "33", "55", "57", "71", "77", "99")
+
+        # Known Telegram prefixes
+        telegram_prefixes = ("4100", "4500")
+
+        if instance_id[:4] in telegram_prefixes:
+            # Telegram instance - show logo
+            pixmap = QtGui.QPixmap(resource_path("ui/telegram_logo.png"))
+            if not pixmap.isNull():
+                # Scale to fit height while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaledToHeight(28, QtCore.Qt.SmoothTransformation)
+                self.instance_type_label.setPixmap(scaled_pixmap)
+                self.instance_type_label.setStyleSheet(
+                    "padding: 2px 8px; background-color: #0088cc; border-radius: 3px;"
+                )
+            else:
+                self.instance_type_label.setText("Telegram")
+                self.instance_type_label.setStyleSheet(
+                    "font-weight: bold; padding: 2px 8px; background-color: #0088cc; color: white; border-radius: 3px;"
+                )
+            return
 
         if pool_prefix in max_prefixes:
             # MAX instance - show logo
@@ -1767,6 +1799,105 @@ class App(QtWidgets.QWidget):
             )
 
         self._run_async("Updating API token...", work)
+
+    # Telegram Authentication methods
+
+    def run_start_authorization(self):
+        """Start phone-based authorization for Telegram instance."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        phone = forms.ask_start_authorization(self)
+        if phone is None:
+            self.output.setPlainText("Start Authorization cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id, lambda api_url, api_token: ga.start_authorization(api_url, instance_id, api_token, phone)
+            )
+
+        self._run_async(f"Starting Telegram authorization for {phone}...", work)
+
+    def run_send_authorization_code(self):
+        """Send Telegram authorization code with optional 2FA password."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        result = forms.ask_send_authorization_code(self)
+        if result is None:
+            self.output.setPlainText("Send Authorization Code cancelled.")
+            return
+
+        code, password = result
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_authorization_code(api_url, instance_id, api_token, code, password),
+            )
+
+        self._run_async("Sending authorization code...", work)
+
+    def run_send_authorization_password(self):
+        """Send Telegram 2FA password."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        password = forms.ask_send_authorization_password(self)
+        if password is None:
+            self.output.setPlainText("Send 2FA Password cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.send_authorization_password(api_url, instance_id, api_token, password),
+            )
+
+        self._run_async("Sending 2FA password...", work)
+
+    def run_set_profile_picture(self):
+        """Set profile picture for the account."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        from PySide6.QtWidgets import QFileDialog
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Profile Picture",
+            "",
+            "Images (*.jpg *.jpeg *.webp);;All Files (*)",
+        )
+
+        if not file_path:
+            self.output.setPlainText("Set Profile Picture cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.set_profile_picture(api_url, instance_id, api_token, file_path),
+            )
+
+        self._run_async(f"Setting profile picture from {file_path}...", work)
 
     def run_get_account_settings(self):
         instance_id = self._get_instance_id_or_warn()
