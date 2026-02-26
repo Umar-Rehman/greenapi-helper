@@ -24,6 +24,36 @@ TAB_CONFIG = {
                 ],
             },
             {
+                "title": "Telegram Authentication",
+                "buttons": [
+                    {
+                        "text": "Start Phone Authorization",
+                        "handler": "run_start_authorization",
+                        "action_type": "post",
+                    },
+                    {
+                        "text": "Send Authorization Code",
+                        "handler": "run_send_authorization_code",
+                        "action_type": "post",
+                    },
+                    {
+                        "text": "Send 2FA Password",
+                        "handler": "run_send_authorization_password",
+                        "action_type": "post",
+                    },
+                ],
+            },
+            {
+                "title": "Profile",
+                "buttons": [
+                    {
+                        "text": "Set Profile Picture",
+                        "handler": "run_set_profile_picture",
+                        "action_type": "post",
+                    },
+                ],
+            },
+            {
                 "title": "Configuration",
                 "buttons": [
                     {

@@ -47,6 +47,18 @@ def is_max_instance(api_url: str) -> bool:
     return "/v3" in api_url
 
 
+def is_telegram_instance(instance_settings: dict) -> bool:
+    """Check if this is a Telegram instance based on instance settings.
+
+    Args:
+        instance_settings: Dict containing instance settings (from getSettings response)
+
+    Returns:
+        True if typeInstance is 'tgm' (Telegram), False otherwise.
+    """
+    return instance_settings.get("typeInstance") == "tgm"
+
+
 def normalize_group_id(group_id: str, api_url: str) -> str:
     """Normalize group ID format by adding @g.us suffix if missing (for WhatsApp instances).
 
@@ -240,6 +252,91 @@ def update_api_token(api_url: str, instance_id: str, api_token: str) -> str:
     Returns new API token in response.
     """
     return make_api_call(api_url, instance_id, api_token, "updateApiToken", "GET")
+
+
+# Telegram-Specific Authentication Methods
+
+
+def start_authorization(api_url: str, instance_id: str, api_token: str, phone_number: int) -> str:
+    """Start phone-based authorization for Telegram instance.
+
+    Args:
+        api_url: API base URL
+        instance_id: Instance ID
+        api_token: API token
+        phone_number: Phone number without + or 00 prefix (e.g., 79876543210)
+
+    Returns:
+        JSON response with status and reason
+    """
+    return make_api_call(
+        api_url, instance_id, api_token, "startAuthorization", "POST", json_body={"phoneNumber": int(phone_number)}
+    )
+
+
+def send_authorization_code(
+    api_url: str, instance_id: str, api_token: str, code: str, password: Optional[str] = None
+) -> str:
+    """Send authorization code for Telegram instance (with optional 2FA password).
+
+    Args:
+        api_url: API base URL
+        instance_id: Instance ID
+        api_token: API token
+        code: Verification code received via SMS/Telegram
+        password: Optional 2FA password if 2FA is enabled
+
+    Returns:
+        JSON response with status and reason
+    """
+    body = {"code": code}
+    if password:
+        body["password"] = password
+    return make_api_call(api_url, instance_id, api_token, "sendAuthorizationCode", "POST", json_body=body)
+
+
+def send_authorization_password(api_url: str, instance_id: str, api_token: str, password: str) -> str:
+    """Send 2FA password for Telegram instance (when 2fa_required).
+
+    Args:
+        api_url: API base URL
+        instance_id: Instance ID
+        api_token: API token
+        password: Two-factor authentication password
+
+    Returns:
+        JSON response with status and reason
+    """
+    return make_api_call(
+        api_url, instance_id, api_token, "sendAuthorizationPassword", "POST", json_body={"password": password}
+    )
+
+
+def set_profile_picture(api_url: str, instance_id: str, api_token: str, file_path: str) -> str:
+    """Set profile picture for the account.
+
+    Args:
+        api_url: API base URL
+        instance_id: Instance ID
+        api_token: API token
+        file_path: Path to image file (*.jpg or *.webp)
+
+    Returns:
+        JSON response with status, urlAvatar, and setProfilePicture boolean
+    """
+    url = _build_url(api_url, instance_id, f"setProfilePicture/{api_token}")
+
+    with open(file_path, "rb") as f:
+        files = {"file": f}
+        cert = get_certificate_files()
+        try:
+            response = requests.post(url, files=files, cert=cert, verify=VERIFY_TLS, timeout=TIMEOUT_SECONDS)
+            response.raise_for_status()
+            return response.text
+        except requests.exceptions.Timeout:
+            return '{"error": "Request timed out"}'
+        except requests.exceptions.RequestException as e:
+            return f'{{"error": "{str(e)}"}}'
 
 
 def get_account_settings(api_url: str, instance_id: str, api_token: str) -> str:
