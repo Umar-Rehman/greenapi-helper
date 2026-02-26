@@ -152,6 +152,7 @@ jobs:
       with:
         name: greenapi-helper-executable
         path: |
+          dist/greenapi-helper.exe
           dist/greenapi-helper-installer.exe
           dist/greenapi-helper-installer.zip
           dist/greenapi-helper.zip
@@ -202,6 +203,7 @@ jobs:
           ## What's Changed
           See the [full changelog](https://github.com/${{ github.repository }}/commits/v${{ steps.get_version.outputs.version }})
         files: |
+          greenapi-helper.exe
           greenapi-helper-installer.exe
           greenapi-helper-installer.zip
           greenapi-helper.zip
