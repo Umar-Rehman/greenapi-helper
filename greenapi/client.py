@@ -350,9 +350,7 @@ def get_account_settings(api_url: str, instance_id: str, api_token: str) -> str:
     endpoint = "getWASettings"
     try:
         # Try to get instance settings to check for Telegram
-        settings_resp = make_api_call(api_url, instance_id, api_token, "getSettings", "GET")
-        import json
-        settings = json.loads(settings_resp) if settings_resp and settings_resp.startswith('{') else {}
+        make_api_call(api_url, instance_id, api_token, "getSettings", "GET")
         if is_max_instance(api_url) or is_telegram_instance(api_url):
             endpoint = "getAccountSettings"
     except Exception:
