@@ -47,16 +47,16 @@ def is_max_instance(api_url: str) -> bool:
     return "/v3" in api_url
 
 
-def is_telegram_instance(instance_settings: dict) -> bool:
-    """Check if this is a Telegram instance based on instance settings.
+def is_telegram_instance(api_url: str) -> bool:
+    """Check if this is a Telegram instance based on API URL (4100 or 4500 pool).
 
     Args:
-        instance_settings: Dict containing instance settings (from getSettings response)
+        api_url: The API URL to determine instance type
 
     Returns:
-        True if typeInstance is 'tgm' (Telegram), False otherwise.
+        True if api_url contains '4100' or '4500', False otherwise.
     """
-    return instance_settings.get("typeInstance") == "tgm"
+    return "4100" in api_url or "4500" in api_url
 
 
 def normalize_group_id(group_id: str, api_url: str) -> str:
@@ -345,7 +345,20 @@ def get_account_settings(api_url: str, instance_id: str, api_token: str) -> str:
     For WhatsApp instances: calls getWASettings
     For MAX instances: calls getAccountSettings
     """
-    endpoint = "getAccountSettings" if is_max_instance(api_url) else "getWASettings"
+    # Determine if this is a MAX or Telegram instance
+    # For Telegram, we need instance settings, so fetch them first
+    endpoint = "getWASettings"
+    try:
+        # Try to get instance settings to check for Telegram
+        settings_resp = make_api_call(api_url, instance_id, api_token, "getSettings", "GET")
+        import json
+        settings = json.loads(settings_resp) if settings_resp and settings_resp.startswith('{') else {}
+        if is_max_instance(api_url) or is_telegram_instance(api_url):
+            endpoint = "getAccountSettings"
+    except Exception:
+        # Fallback to MAX check only if settings fetch fails
+        if is_max_instance(api_url):
+            endpoint = "getAccountSettings"
     return make_api_call(api_url, instance_id, api_token, endpoint, "GET")
 
 
