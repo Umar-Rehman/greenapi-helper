@@ -31,6 +31,14 @@ RULES_EXACT: dict[int, PoolRule] = {
         direct_host="https://1103.api.green-api.com",
     ),
     2204: PoolRule(default_host="https://api.greenapi.com"),
+    4100: PoolRule(
+        default_host="https://4100.api.green-api.com",
+        direct_host="https://4100.api.green-api.com",
+    ),
+    4500: PoolRule(
+        default_host="https://4500.api.green-api.com",
+        direct_host="https://4500.api.green-api.com",
+    ),
     7103: PoolRule(
         default_host="https://api.greenapi.com",
         direct_host="https://7103.api.greenapi.com",
