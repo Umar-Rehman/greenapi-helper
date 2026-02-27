@@ -4,10 +4,22 @@ import os
 import json
 import platform
 import subprocess
+import logging
 from typing import Optional, Tuple
 from dotenv import load_dotenv
 
+
 load_dotenv(".env.local")
+
+# Setup logging
+LOG_PATH = os.path.join(os.path.expanduser("~"), "greenapi_kibana_auth.log")
+logging.basicConfig(
+    filename=LOG_PATH,
+    filemode="a",
+    format="%(asctime)s %(levelname)s %(message)s",
+    level=logging.DEBUG
+)
+logging.info("--- New authentication session started ---")
 
 # Configuration with environment variable support
 KIBANA_URL = os.getenv("KIBANA_URL", "https://elk.prod.greenapi.org")
@@ -38,31 +50,40 @@ def get_kibana_session_cookie(
 
     # Strategy 1: Try WinHTTP with cert from store (no key export)
     if platform.system() == "Windows":
+        logging.info("Trying Strategy 1: WinHTTP cert auth")
         cookie = _try_kibana_auth_winhttp(cert_files)
         if cookie:
+            logging.info("Strategy 1 (WinHTTP cert auth) succeeded")
             print("Strategy 1 (WinHTTP cert auth) succeeded")
             return cookie
 
     # Strategy 2: Try Windows PowerShell with cert from store (no key export)
     if platform.system() == "Windows":
+        logging.info("Trying Strategy 2: PowerShell cert auth")
         cookie = _try_kibana_auth_powershell(cert_files)
         if cookie:
+            logging.info("Strategy 2 (PowerShell cert auth) succeeded")
             print("Strategy 2 (PowerShell cert auth) succeeded")
             return cookie
 
     # Strategy 3: Try certificate-only mode (let Windows/SSL handle the key)
+    logging.info("Trying Strategy 3: Cert-only auth")
     cookie = _try_kibana_auth_cert_only(cert_files)
     if cookie:
+        logging.info("Strategy 3 (Cert-only auth) succeeded")
         print("Strategy 3 (Cert-only auth) succeeded")
         return cookie
 
     # Strategy 4: Try with full private key export
+    logging.info("Trying Strategy 4: Cert with key export")
     cookie = _try_kibana_auth_with_key(cert_files)
     if cookie:
+        logging.info("Strategy 4 (Cert with key export) succeeded")
         print("Strategy 4 (Cert with key export) succeeded")
         return cookie
 
     # Strategy 3: Failed - return None for fallback to manual entry
+    logging.error("All authentication strategies failed - please enter Kibana session cookie manually.")
     print("All authentication strategies failed - please enter Kibana session cookie manually.")
     return None
 
@@ -79,19 +100,23 @@ def get_kibana_session_cookie_with_password(
         Check stderr for error details when debugging.
     """
     if platform.system() != "Windows":
+        logging.error("get_kibana_session_cookie_with_password: Not running on Windows, aborting.")
         return None
+    logging.info("get_kibana_session_cookie_with_password: Attempting PowerShell login with username/password.")
     return _try_kibana_auth_powershell_login(username, password, cert_files)
 
 
 def _try_kibana_auth_cert_only(cert_files: Optional[Tuple[str, str]]) -> Optional[str]:
     """Try to authenticate using just the certificate (Windows handles key)."""
     try:
+        logging.info(f"_try_kibana_auth_cert_only: Using cert_files={cert_files}")
         cert = cert_files or ("client.crt", "client.key")
 
         # Use only the cert file, not the key - let Windows SSL handle it
         cert_only = cert[0] if isinstance(cert, tuple) else cert
 
         for path in KIBANA_AUTH_PATHS:
+            logging.info(f"_try_kibana_auth_cert_only: Requesting {KIBANA_URL}{path}")
             resp = requests.get(
                 f"{KIBANA_URL}{path}",
                 cert=cert_only,  # Just the cert, no key
@@ -99,18 +124,18 @@ def _try_kibana_auth_cert_only(cert_files: Optional[Tuple[str, str]]) -> Optiona
                 timeout=10,
                 allow_redirects=True,
             )
-
+            logging.info(f"_try_kibana_auth_cert_only: Response {resp.status_code}")
             if resp.status_code in (200, 302, 401, 403):
                 cookie = _extract_session_cookie(resp)
                 if cookie:
+                    logging.info(f"_try_kibana_auth_cert_only: Got session cookie for {path}")
                     return cookie
 
         return None
 
     except Exception as e:
-        # Log error for debugging but don't fail - try next method
+        logging.error(f"_try_kibana_auth_cert_only: Exception: {e}")
         import sys
-
         print(f"Cert-only auth failed: {e}", file=sys.stderr)
         return None
 
@@ -118,6 +143,7 @@ def _try_kibana_auth_cert_only(cert_files: Optional[Tuple[str, str]]) -> Optiona
 def _try_kibana_auth_powershell(cert_files: Optional[Tuple[str, str]]) -> Optional[str]:
     """Try to authenticate using PowerShell and a cert from Windows store (no key export)."""
     try:
+        logging.info(f"_try_kibana_auth_powershell: Using cert_files={cert_files}")
         thumbprint = _get_thumbprint_from_cert_files(cert_files)
         if not thumbprint:
             import sys
@@ -143,6 +169,7 @@ foreach ($p in $auth_paths) {{
 }}
 """
 
+        logging.info("_try_kibana_auth_powershell: Running PowerShell script for authentication.")
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", script],
             capture_output=True,
@@ -153,14 +180,16 @@ foreach ($p in $auth_paths) {{
 
         if result.returncode != 0:
             import sys
-
+            logging.error(f"_try_kibana_auth_powershell: PowerShell failed: {result.stderr}")
             print(f"PowerShell auth failed: {result.stderr}", file=sys.stderr)
             return None
 
         cookie = (result.stdout or "").strip()
         if cookie:
+            logging.info("_try_kibana_auth_powershell: Got session cookie from PowerShell.")
             return cookie
 
+        logging.warning("_try_kibana_auth_powershell: No session cookie returned from PowerShell.")
         return None
 
     except Exception:
@@ -174,6 +203,7 @@ def _try_kibana_auth_powershell_login(
 ) -> Optional[str]:
     """Use PowerShell to log into Kibana with username/password and cert-store auth."""
     try:
+        logging.info(f"_try_kibana_auth_powershell_login: Using cert_files={cert_files}, username={username}")
         import sys
 
         thumbprint = _get_thumbprint_from_cert_files(cert_files)
@@ -194,6 +224,7 @@ if ($cert -and $cert.HasPrivateKey) {{
     Write-Output "INVALID"
 }}
 """
+        logging.info("_try_kibana_auth_powershell_login: Verifying certificate in store.")
         verify_result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", verify_script],
             capture_output=True,
@@ -203,6 +234,7 @@ if ($cert -and $cert.HasPrivateKey) {{
         )
 
         if verify_result.stdout.strip() != "VALID":
+            logging.error("_try_kibana_auth_powershell_login: Certificate not found or missing private key.")
             import sys
 
             print(
@@ -308,6 +340,7 @@ foreach ($p in $paths) {{
 }}
 """
 
+        logging.info("_try_kibana_auth_powershell_login: Running PowerShell login script.")
         result = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
             capture_output=True,
@@ -318,6 +351,7 @@ foreach ($p in $paths) {{
         )
 
         if result.returncode != 0:
+            logging.error(f"_try_kibana_auth_powershell_login: PowerShell login failed: {result.stderr}")
             # Extract just the actual error messages
             import sys
 
@@ -390,8 +424,10 @@ foreach ($p in $paths) {{
 
         cookie = (result.stdout or "").strip()
         if cookie:
+            logging.info("_try_kibana_auth_powershell_login: Got session cookie from PowerShell login.")
             return cookie
 
+        logging.warning("_try_kibana_auth_powershell_login: No session cookie returned after successful authentication.")
         print(
             "Kibana login: No session cookie returned after successful authentication",
             file=sys.stderr,
@@ -408,6 +444,7 @@ foreach ($p in $paths) {{
 def _try_kibana_auth_winhttp(cert_files: Optional[Tuple[str, str]]) -> Optional[str]:
     """Try to authenticate using WinHTTP COM with a cert from Windows store."""
     try:
+        logging.info(f"_try_kibana_auth_winhttp: Using cert_files={cert_files}")
         import win32com.client
 
         thumbprint = _get_thumbprint_from_cert_files(cert_files)
@@ -421,6 +458,7 @@ def _try_kibana_auth_winhttp(cert_files: Optional[Tuple[str, str]]) -> Optional[
         ]
 
         for store_path in store_paths:
+            logging.info(f"_try_kibana_auth_winhttp: Trying store_path={store_path}")
             req = win32com.client.Dispatch("WinHTTP.WinHTTPRequest.5.1")
             req.SetTimeouts(10000, 10000, 10000, 10000)
             try:
@@ -429,6 +467,7 @@ def _try_kibana_auth_winhttp(cert_files: Optional[Tuple[str, str]]) -> Optional[
                 continue
 
             for path in KIBANA_AUTH_PATHS:
+                logging.info(f"_try_kibana_auth_winhttp: Requesting {KIBANA_URL}{path}")
                 url = f"{KIBANA_URL}{path}"
                 req.Open("GET", url, False)
                 req.Send()
@@ -436,6 +475,7 @@ def _try_kibana_auth_winhttp(cert_files: Optional[Tuple[str, str]]) -> Optional[
                 headers = req.GetAllResponseHeaders()
                 cookie = _extract_cookie_from_headers(headers)
                 if cookie:
+                    logging.info(f"_try_kibana_auth_winhttp: Got session cookie for {path}")
                     return cookie
 
         return None
@@ -447,6 +487,7 @@ def _try_kibana_auth_winhttp(cert_files: Optional[Tuple[str, str]]) -> Optional[
 def _try_kibana_auth_with_key(cert_files: Optional[Tuple[str, str]]) -> Optional[str]:
     """Try to authenticate with extracted private key using Windows CryptoAPI."""
     try:
+        logging.info(f"_try_kibana_auth_with_key: Using cert_files={cert_files}")
         from greenapi.credentials import get_credential_manager
 
         cert_mgr = get_credential_manager()
@@ -462,6 +503,7 @@ def _try_kibana_auth_with_key(cert_files: Optional[Tuple[str, str]]) -> Optional
         if isinstance(cert, tuple) and len(cert) > 1 and not cert[1]:
             return None
 
+        logging.info(f"_try_kibana_auth_with_key: Requesting {KIBANA_URL}/api/status")
         resp = requests.get(
             f"{KIBANA_URL}/api/status",
             cert=cert,
@@ -470,9 +512,12 @@ def _try_kibana_auth_with_key(cert_files: Optional[Tuple[str, str]]) -> Optional
             allow_redirects=True,  # Both cert and key
         )
 
+        logging.info(f"_try_kibana_auth_with_key: Response {resp.status_code}")
         if resp.status_code == 200:
+            logging.info("_try_kibana_auth_with_key: Got session cookie from /api/status.")
             return _extract_session_cookie(resp)
         else:
+            logging.warning(f"_try_kibana_auth_with_key: No session cookie, status {resp.status_code}")
             return None
 
     except Exception:
@@ -485,14 +530,17 @@ def _extract_private_key_windows() -> bool:
     Returns True if successful, False otherwise.
     """
     try:
+        logging.info("_extract_private_key_windows: Attempting to extract private key.")
         from greenapi.credentials import get_credential_manager
 
         cert_mgr = get_credential_manager()
 
         # First, check if a key was already exported during certificate setup
         if cert_mgr.ensure_private_key_exported():
+            logging.info("_extract_private_key_windows: Private key exported successfully.")
             return True
 
+        logging.warning("_extract_private_key_windows: Private key export failed.")
         return False
 
     except Exception:
@@ -502,10 +550,12 @@ def _extract_private_key_windows() -> bool:
 def _extract_session_cookie(response) -> Optional[str]:
     """Extract session cookie from Kibana response."""
     try:
+        logging.info("_extract_session_cookie: Attempting to extract session cookie from response.")
         # Try to get cookies from response
         if response.cookies:
             cookie_str = "; ".join([f"{k}={v}" for k, v in response.cookies.items()])
             if cookie_str:
+                logging.info(f"_extract_session_cookie: Extracted cookie: {cookie_str}")
                 return cookie_str
 
         # Try Set-Cookie header
@@ -513,8 +563,10 @@ def _extract_session_cookie(response) -> Optional[str]:
             cookies = response.cookies
             for cookie_name, cookie_value in cookies.items():
                 if cookie_name and cookie_value:
+                    logging.info(f"_extract_session_cookie: Extracted Set-Cookie: {cookie_name}={cookie_value}")
                     return f"{cookie_name}={cookie_value}"
 
+        logging.warning("_extract_session_cookie: No session cookie found in response.")
         return None
 
     except Exception:
