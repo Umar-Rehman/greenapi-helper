@@ -402,6 +402,21 @@ def check_max(api_url: str, instance_id: str, api_token: str, phone_number: int,
     )
 
 
+def check_telegram(api_url: str, instance_id: str, api_token: str, phone_number: int) -> str:
+    """Check whether a phone number has a Telegram account (Telegram instances only).
+
+    Sends a POST to the checkAccount endpoint with JSON body {"phoneNumber": <int>}.
+    """
+    return make_api_call(
+        api_url,
+        instance_id,
+        api_token,
+        "checkAccount",
+        "POST",
+        json_body={"phoneNumber": int(phone_number)},
+    )
+
+
 # Journal API functions
 
 

@@ -2383,6 +2383,38 @@ class App(QtWidgets.QWidget):
         force_text = " (ignoring cache)" if force else ""
         self._run_async(f"Checking MAX for {phone}{force_text}...", work)
 
+    def run_check_telegram(self):
+        """Prompt for phone number, then call checkAccount API (Telegram instances only)."""
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        if not ga.is_telegram_instance(self._ctx.get("api_url", "")):
+            self.output.setPlainText(
+                "Error: Check Telegram Account is only available for Telegram instances.\n"
+                "WhatsApp instances should use 'Check WhatsApp Account' and "
+                "MAX instances should use 'Check MAX Availability' instead."
+            )
+            return
+
+        phone = forms.ask_check_whatsapp(self)
+        if phone is None:
+            self.output.setPlainText("Check Telegram cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id, lambda api_url, api_token: ga.check_telegram(api_url, instance_id, api_token, phone)
+            )
+
+        self._run_async(f"Checking Telegram for {phone}...", work)
+
     def run_get_contact_info(self):
         """Prompt for chatId and call GetContactInfo API."""
         instance_id = self._get_instance_id_or_warn()

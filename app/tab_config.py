@@ -117,14 +117,14 @@ TAB_CONFIG = {
                 ],
             },
             {
-                "title": "File Queues",
+                "title": "Incoming Webhook Queue",
                 "buttons": [
                     {
-                        "text": "Show Files Queue",
+                        "text": "Show Incoming Webhook Queue",
                         "handler": "run_get_webhook_count",
                     },
                     {
-                        "text": "Clear Files Queue",
+                        "text": "Clear Incoming Webhook Queue",
                         "handler": "run_clear_webhooks",
                         "action_type": "danger",
                     },
@@ -241,6 +241,11 @@ TAB_CONFIG = {
                     {
                         "text": "Check MAX Availability",
                         "handler": "run_check_max",
+                        "action_type": "post",
+                    },
+                    {
+                        "text": "Check Telegram Account",
+                        "handler": "run_check_telegram",
                         "action_type": "post",
                     },
                     {"text": "Get Contacts", "handler": "run_get_contacts"},
