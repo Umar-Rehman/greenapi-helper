@@ -8,16 +8,12 @@ import logging
 from typing import Optional, Tuple
 from dotenv import load_dotenv
 
-
 load_dotenv(".env.local")
 
 # Setup logging
 LOG_PATH = os.path.join(os.path.expanduser("~"), "greenapi_kibana_auth.log")
 logging.basicConfig(
-    filename=LOG_PATH,
-    filemode="a",
-    format="%(asctime)s %(levelname)s %(message)s",
-    level=logging.DEBUG
+    filename=LOG_PATH, filemode="a", format="%(asctime)s %(levelname)s %(message)s", level=logging.DEBUG
 )
 logging.info("--- New authentication session started ---")
 
@@ -136,6 +132,7 @@ def _try_kibana_auth_cert_only(cert_files: Optional[Tuple[str, str]]) -> Optiona
     except Exception as e:
         logging.error(f"_try_kibana_auth_cert_only: Exception: {e}")
         import sys
+
         print(f"Cert-only auth failed: {e}", file=sys.stderr)
         return None
 
@@ -180,6 +177,7 @@ foreach ($p in $auth_paths) {{
 
         if result.returncode != 0:
             import sys
+
             logging.error(f"_try_kibana_auth_powershell: PowerShell failed: {result.stderr}")
             print(f"PowerShell auth failed: {result.stderr}", file=sys.stderr)
             return None
@@ -427,7 +425,9 @@ foreach ($p in $paths) {{
             logging.info("_try_kibana_auth_powershell_login: Got session cookie from PowerShell login.")
             return cookie
 
-        logging.warning("_try_kibana_auth_powershell_login: No session cookie returned after successful authentication.")
+        logging.warning(
+            "_try_kibana_auth_powershell_login: No session cookie returned after successful authentication."
+        )
         print(
             "Kibana login: No session cookie returned after successful authentication",
             file=sys.stderr,
