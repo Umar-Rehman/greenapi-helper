@@ -402,18 +402,22 @@ def check_max(api_url: str, instance_id: str, api_token: str, phone_number: int,
     )
 
 
-def check_telegram(api_url: str, instance_id: str, api_token: str, phone_number: int) -> str:
+def check_telegram(api_url: str, instance_id: str, api_token: str, phone_number: int, force: bool = False) -> str:
     """Check whether a phone number has a Telegram account (Telegram instances only).
 
     Sends a POST to the checkAccount endpoint with JSON body {"phoneNumber": <int>}.
+    force=True passes {"force": true} to bypass server-side cache.
     """
+    body: dict = {"phoneNumber": int(phone_number)}
+    if force:
+        body["force"] = True
     return make_api_call(
         api_url,
         instance_id,
         api_token,
         "checkAccount",
         "POST",
-        json_body={"phoneNumber": int(phone_number)},
+        json_body=body,
     )
 
 

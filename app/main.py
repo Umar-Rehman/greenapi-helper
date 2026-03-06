@@ -78,7 +78,7 @@ class App(QtWidgets.QWidget):
         # Check for updates after UI is set up
         QtCore.QTimer.singleShot(1000, self.update_manager.check_for_updates)  # Check after 1 second
 
-    def _add_button(self, layout, text, handler, action_type=None):
+    def _add_button(self, layout, text, handler, action_type=None, handler_name=None):
         """Add a QPushButton to the given layout with specified text and handler.
 
         Args:
@@ -86,6 +86,7 @@ class App(QtWidgets.QWidget):
             text: The button's display text.
             handler: The function to connect to the button's clicked signal.
             action_type: Optional property to set on the button (e.g., 'danger').
+            handler_name: Optional method name stored on the button for history rerun.
 
         Returns:
             The created QPushButton instance.
@@ -94,6 +95,8 @@ class App(QtWidgets.QWidget):
         button.clicked.connect(handler)
         if action_type:
             button.setProperty("actionType", action_type)
+        if handler_name:
+            button.setProperty("handlerName", handler_name)
         layout.addWidget(button)
         return button
 
@@ -378,7 +381,7 @@ class App(QtWidgets.QWidget):
                 handler = getattr(self, handler_name)
                 action_type = button_config.get("action_type")
 
-                self._add_button(group_layout, button_config["text"], handler, action_type)
+                self._add_button(group_layout, button_config["text"], handler, action_type, handler_name)
 
             group.setLayout(group_layout)
             tab_layout.addWidget(group)
@@ -559,6 +562,7 @@ class App(QtWidgets.QWidget):
                 instance_id=getattr(worker, "_instance_id", ""),
                 success=True,
                 output=output_text or self._pretty_print(payload),
+                handler_name=getattr(worker, "_handler_name", ""),
             )
 
         if not (isinstance(payload, dict) and "ctx" in payload):
@@ -738,6 +742,7 @@ class App(QtWidgets.QWidget):
                 instance_id=getattr(worker, "_instance_id", ""),
                 success=False,
                 output=user_friendly_error,
+                handler_name=getattr(worker, "_handler_name", ""),
             )
 
         self.output.setPlainText(user_friendly_error)
@@ -783,8 +788,10 @@ class App(QtWidgets.QWidget):
         # Use button text if available, otherwise use status text
         if btn is not None and hasattr(btn, "text"):
             worker._operation_name = btn.text()
+            worker._handler_name = btn.property("handlerName") or ""
         else:
             worker._operation_name = status_text
+            worker._handler_name = ""
         worker._instance_id = self.instance_input.currentText() if hasattr(self, "instance_input") else ""
 
         def on_result(result):
@@ -1099,7 +1106,13 @@ class App(QtWidgets.QWidget):
         self.settings.setValue("request_history", self.request_history[-50:])
 
     def _add_to_history(
-        self, method_name: str, instance_id: str, success: bool, params: dict = None, output: str = None
+        self,
+        method_name: str,
+        instance_id: str,
+        success: bool,
+        params: dict = None,
+        output: str = None,
+        handler_name: str = "",
     ):
         """Add a request to history."""
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -1114,6 +1127,7 @@ class App(QtWidgets.QWidget):
         history_entry = {
             "timestamp": timestamp,
             "method": method_name,
+            "handler_name": handler_name,
             "instance_id": instance_id,
             "success": success,
             "params": params or {},
@@ -1218,6 +1232,7 @@ class App(QtWidgets.QWidget):
     def _rerun_from_history(self, entry: dict):
         """Re-run a request from history."""
         method = entry.get("method", "")
+        handler_name = entry.get("handler_name", "")
         instance_id = entry.get("instance_id", "")
 
         # Set instance ID if available
@@ -1229,8 +1244,17 @@ class App(QtWidgets.QWidget):
             self.status_label.setText("Authentication required to re-run request")
             return
 
-        # Try to call the method directly if it exists
-        if hasattr(self, method) and callable(getattr(self, method)):
+        # 1. Try the stored handler name (exact, reliable)
+        if handler_name and hasattr(self, handler_name) and callable(getattr(self, handler_name)):
+            self.status_label.setText(f"Re-running: {method}")
+            try:
+                getattr(self, handler_name)()
+            except Exception as e:
+                self.output.setPlainText(f"Error re-running {handler_name}: {str(e)}")
+            return
+
+        # 2. Try the method field as a direct attribute (legacy entries)
+        if method and hasattr(self, method) and callable(getattr(self, method)):
             self.status_label.setText(f"Re-running: {method}")
             try:
                 getattr(self, method)()
@@ -1238,10 +1262,9 @@ class App(QtWidgets.QWidget):
                 self.output.setPlainText(f"Error re-running {method}: {str(e)}")
             return
 
-        # If no exact match, try finding by partial button text match
+        # 3. Fuzzy match via button text → run_* method conversion (legacy entries)
         for method_key in dir(self):
             if method_key.startswith("run_"):
-                # Convert method key to readable text (e.g., "run_get_qr_code" -> "Get QR Code")
                 readable_name = method_key.replace("run_", "").replace("_", " ").title()
                 if readable_name.lower() in method.lower() or method.lower() in readable_name.lower():
                     self.status_label.setText(f"Re-running: {method}")
@@ -2384,7 +2407,7 @@ class App(QtWidgets.QWidget):
         self._run_async(f"Checking MAX for {phone}{force_text}...", work)
 
     def run_check_telegram(self):
-        """Prompt for phone number, then call checkAccount API (Telegram instances only)."""
+        """Prompt for phone number and force flag, then call checkAccount API (Telegram instances only)."""
         instance_id = self._get_instance_id_or_warn()
         if not instance_id:
             return
@@ -2403,17 +2426,20 @@ class App(QtWidgets.QWidget):
             )
             return
 
-        phone = forms.ask_check_whatsapp(self)
-        if phone is None:
+        result = forms.ask_check_telegram(self)
+        if result is None:
             self.output.setPlainText("Check Telegram cancelled.")
             return
 
+        phone, force = result
+
         def work():
             return self._with_ctx(
-                instance_id, lambda api_url, api_token: ga.check_telegram(api_url, instance_id, api_token, phone)
+                instance_id, lambda api_url, api_token: ga.check_telegram(api_url, instance_id, api_token, phone, force)
             )
 
-        self._run_async(f"Checking Telegram for {phone}...", work)
+        force_text = " (ignoring cache)" if force else ""
+        self._run_async(f"Checking Telegram for {phone}{force_text}...", work)
 
     def run_get_contact_info(self):
         """Prompt for chatId and call GetContactInfo API."""
