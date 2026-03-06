@@ -395,6 +395,44 @@ def ask_check_max(parent: QWidget, *, phone_default: str | None = None):
     return vals["phoneNumber"], vals["force"]
 
 
+def ask_check_telegram(parent: QWidget, *, phone_default: str | None = None):
+    """Ask for phone number and force flag for Check Telegram Account.
+
+    Returns None if cancelled, otherwise returns tuple (phone: str, force: bool).
+    """
+
+    def _validator(values: dict[str, Any]) -> str | None:
+        return validate_phone_number(values.get("phoneNumber", ""))
+
+    dlg = FormDialog(
+        "Check Telegram Account",
+        fields=[
+            TextField(
+                key="phoneNumber",
+                label="Phone number:",
+                default=str(phone_default or ""),
+                placeholder="e.g. 79876543210 (include country code)",
+                required=True,
+                min_width=420,
+            ),
+            BoolField(
+                key="force",
+                label="Ignore cache (force):",
+                default=False,
+            ),
+        ],
+        parent=parent,
+        first_focus_key="phoneNumber",
+        min_width=480,
+        fusion=False,
+        validator=_validator,
+    )
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    vals = dlg.values()
+    return vals["phoneNumber"], vals["force"]
+
+
 # Telegram Authentication dialog helpers
 
 
