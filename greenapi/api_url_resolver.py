@@ -51,6 +51,11 @@ RULES_EXACT: dict[int, PoolRule] = {
         default_host="https://api.green-api.com",
         direct_host="https://9906.api.green-api.com",
     ),
+    3502: PoolRule(
+        default_host="https://api.green-api.com",
+        direct_host="https://3502.api.green-api.com",
+        path_prefix="/v3",
+    ),
 }
 
 # Prefix rules (includes all XXYY)
