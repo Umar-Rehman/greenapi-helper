@@ -533,6 +533,10 @@ class App(QtWidgets.QWidget):
         # Initialize search tracking
         self.search_matches = []
         self.current_match_index = -1
+        self.search_timer = QtCore.QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(250)
+        self.search_timer.timeout.connect(self._perform_search)
 
         output_container.addWidget(self.output)
 
@@ -985,43 +989,28 @@ class App(QtWidgets.QWidget):
             self._on_search_text_changed()
 
     def _on_search_text_changed(self):
-        """Handle search text changes - highlight all matches."""
-        search_text = self.search_field.text()
+        """Schedule search when the text changes."""
+        self.search_timer.start()
 
-        # Clear previous highlights
+    def _perform_search(self):
+        """Perform the actual search after the user stops typing."""
+        search_text = self.search_field.text()
         self._clear_search_highlights()
 
         if not search_text:
             self.match_count_label.setText("")
             return
 
-        # Get search flags (case insensitive by default)
-        flags = QtGui.QTextDocument.FindFlags()
-
-        # Find all matches and highlight them
-        cursor = self.output.textCursor()
-        cursor.setPosition(0)
-        self.output.setTextCursor(cursor)
-
+        content = self.output.toPlainText()
         self.search_matches = []
-        match_format = QtGui.QTextCharFormat()
-        match_format.setBackground(QtGui.QColor("#FFEB3B"))  # Yellow highlight
-
-        # Search for all occurrences
+        start = 0
         while True:
-            cursor = self.output.document().find(search_text, cursor, flags)
-            if cursor.isNull():
+            idx = content.find(search_text, start)
+            if idx == -1:
                 break
+            self.search_matches.append(idx)
+            start = idx + len(search_text)
 
-            self.search_matches.append(cursor.position())
-
-            # Apply highlight
-            extra_selection = QtWidgets.QTextEdit.ExtraSelection()
-            extra_selection.cursor = cursor
-            extra_selection.format = match_format
-            self.output.setExtraSelections(self.output.extraSelections() + [extra_selection])
-
-        # Update match count
         if self.search_matches:
             self.current_match_index = 0
             self.match_count_label.setText(f"1 of {len(self.search_matches)}")
@@ -1049,46 +1038,33 @@ class App(QtWidgets.QWidget):
         self._highlight_current_match()
 
     def _highlight_current_match(self):
-        """Highlight the current match with a different color and scroll to it."""
+        """Highlight the current match and scroll to it."""
         if self.current_match_index < 0 or self.current_match_index >= len(self.search_matches):
+            self.output.setExtraSelections([])
             return
 
-        # Re-highlight all matches
         search_text = self.search_field.text()
-        flags = QtGui.QTextDocument.FindFlags()
+        start = self.search_matches[self.current_match_index]
+        end = start + len(search_text)
 
-        selections = []
         cursor = self.output.textCursor()
-        cursor.setPosition(0)
+        cursor.setPosition(start)
+        cursor.setPosition(end, QtGui.QTextCursor.KeepAnchor)
 
-        match_index = 0
-        while True:
-            cursor = self.output.document().find(search_text, cursor, flags)
-            if cursor.isNull():
-                break
+        extra_selection = QtWidgets.QTextEdit.ExtraSelection()
+        extra_selection.cursor = cursor
+        extra_selection.format.setBackground(QtGui.QColor("#FF9800"))  # Orange
 
-            extra_selection = QtWidgets.QTextEdit.ExtraSelection()
-            extra_selection.cursor = cursor
-
-            # Current match gets orange highlight, others get yellow
-            if match_index == self.current_match_index:
-                extra_selection.format.setBackground(QtGui.QColor("#FF9800"))  # Orange
-                # Scroll to this match
-                self.output.setTextCursor(cursor)
-                self.output.ensureCursorVisible()
-            else:
-                extra_selection.format.setBackground(QtGui.QColor("#FFEB3B"))  # Yellow
-
-            selections.append(extra_selection)
-            match_index += 1
-
-        self.output.setExtraSelections(selections)
+        self.output.setExtraSelections([extra_selection])
+        self.output.setTextCursor(cursor)
+        self.output.ensureCursorVisible()
 
     def _clear_search_highlights(self):
         """Clear all search highlights."""
         self.output.setExtraSelections([])
         self.search_matches = []
         self.current_match_index = -1
+        self.search_timer.stop()
         if hasattr(self, "match_count_label"):
             self.match_count_label.setText("")
 
@@ -1935,10 +1911,66 @@ class App(QtWidgets.QWidget):
     # Journal API methods
 
     def run_get_incoming_msgs_journal(self):
-        self._run_mapped_api_call("run_get_incoming_msgs_journal")
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        minutes = forms.ask_minutes(self, minutes_default=1440)
+        if minutes is None:
+            self.output.setPlainText("Get Incoming Messages Journal cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.get_incoming_msgs_journal(
+                    api_url, instance_id, api_token, minutes=minutes
+                ),
+            )
+
+        duration_label = (
+            f"{minutes // 1440} days"
+            if minutes % 1440 == 0
+            else f"{minutes} minutes"
+        )
+        self._run_async(f"Fetching Incoming Messages Journal for {duration_label}...", work)
 
     def run_get_outgoing_msgs_journal(self):
-        self._run_mapped_api_call("run_get_outgoing_msgs_journal")
+        instance_id = self._get_instance_id_or_warn()
+        if not instance_id:
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        if not self._ctx_is_valid(instance_id):
+            self._ctx = self._fetch_ctx(instance_id)
+
+        minutes = forms.ask_minutes(self, minutes_default=1440)
+        if minutes is None:
+            self.output.setPlainText("Get Outgoing Messages Journal cancelled.")
+            return
+
+        def work():
+            return self._with_ctx(
+                instance_id,
+                lambda api_url, api_token: ga.get_outgoing_msgs_journal(
+                    api_url, instance_id, api_token, minutes=minutes
+                ),
+            )
+
+        duration_label = (
+            f"{minutes // 1440} days"
+            if minutes % 1440 == 0
+            else f"{minutes} minutes"
+        )
+        self._run_async(f"Fetching Outgoing Messages Journal for {duration_label}...", work)
 
     def run_get_chat_history(self):
         instance_id = self._get_instance_id_or_warn()

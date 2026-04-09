@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLineEdit,
     QSpinBox,
+    QComboBox,
     QCheckBox,
     QDialogButtonBox,
     QMessageBox,
@@ -47,7 +48,16 @@ class BoolField:
     required: bool = False
 
 
-FieldSpec = TextField | IntField | BoolField
+@dataclass
+class ChoiceField:
+    key: str
+    label: str
+    options: list[tuple[str, str]]
+    default: str
+    required: bool = True
+
+
+FieldSpec = TextField | IntField | BoolField | ChoiceField
 
 
 # Form dialog
@@ -102,6 +112,14 @@ class FormDialog(QDialog):
                 w.setChecked(spec.default)
                 layout.addRow(spec.label, w)
                 self._widgets[spec.key] = w
+            elif isinstance(spec, ChoiceField):
+                w = QComboBox()
+                for value, label in spec.options:
+                    w.addItem(label, value)
+                default_index = next((i for i, (value, _) in enumerate(spec.options) if value == spec.default), 0)
+                w.setCurrentIndex(default_index)
+                layout.addRow(spec.label, w)
+                self._widgets[spec.key] = w
             else:
                 raise TypeError(f"Unknown field spec: {spec}")
 
@@ -151,6 +169,8 @@ class FormDialog(QDialog):
                 out[spec.key] = int(w.value())
             elif isinstance(spec, BoolField):
                 out[spec.key] = bool(w.isChecked())
+            elif isinstance(spec, ChoiceField):
+                out[spec.key] = str(w.currentData())
         return out
 
 
@@ -198,6 +218,50 @@ def ask_chat_history(parent: QWidget, *, chat_id_default: str = "", count_defaul
         return None
     v = dlg.values()
     return v["chatId"], v["count"]
+
+
+def ask_minutes(parent: QWidget, *, minutes_default: int = 1440):
+    default_unit = "days" if minutes_default % 1440 == 0 and minutes_default >= 1440 else "minutes"
+    default_value = minutes_default // 1440 if default_unit == "days" else minutes_default
+
+    def _validator(values: dict[str, Any]) -> str | None:
+        if values["value"] < 1:
+            return "Duration must be at least 1."
+        if values["unit"] == "minutes" and values["value"] > 10080:
+            return "Minutes cannot exceed 10080 (7 days)."
+        if values["unit"] == "days" and values["value"] > 30:
+            return "Days cannot exceed 30."
+        return None
+
+    dlg = FormDialog(
+        "Journal Duration",
+        fields=[
+            ChoiceField(
+                key="unit",
+                label="Unit:",
+                options=[
+                    ("minutes", "Minutes"),
+                    ("days", "Days"),
+                ],
+                default=default_unit,
+            ),
+            IntField(
+                key="value",
+                label="Value:",
+                default=default_value,
+                min_value=1,
+                max_value=10080,
+                step=1,
+            ),
+        ],
+        parent=parent,
+        first_focus_key="value",
+        validator=_validator,
+    )
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    v = dlg.values()
+    return v["value"] * 1440 if v["unit"] == "days" else v["value"]
 
 
 def ask_get_message(parent: QWidget, *, chat_id_default: str = ""):
