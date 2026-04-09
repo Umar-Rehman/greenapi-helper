@@ -1001,15 +1001,12 @@ class App(QtWidgets.QWidget):
             self.match_count_label.setText("")
             return
 
-        content = self.output.toPlainText()
         self.search_matches = []
-        start = 0
-        while True:
-            idx = content.find(search_text, start)
-            if idx == -1:
-                break
-            self.search_matches.append(idx)
-            start = idx + len(search_text)
+        document = self.output.document()
+        cursor = document.find(search_text, 0, QtGui.QTextDocument.FindCaseSensitively)
+        while cursor is not None and not cursor.isNull():
+            self.search_matches.append(cursor)
+            cursor = document.find(search_text, cursor, QtGui.QTextDocument.FindCaseSensitively)
 
         if self.search_matches:
             self.current_match_index = 0
@@ -1043,14 +1040,7 @@ class App(QtWidgets.QWidget):
             self.output.setExtraSelections([])
             return
 
-        search_text = self.search_field.text()
-        start = self.search_matches[self.current_match_index]
-        end = start + len(search_text)
-
-        cursor = self.output.textCursor()
-        cursor.setPosition(start)
-        cursor.setPosition(end, QtGui.QTextCursor.KeepAnchor)
-
+        cursor = self.search_matches[self.current_match_index]
         extra_selection = QtWidgets.QTextEdit.ExtraSelection()
         extra_selection.cursor = cursor
         extra_selection.format.setBackground(QtGui.QColor("#FF9800"))  # Orange
