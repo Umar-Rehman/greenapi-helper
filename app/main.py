@@ -1934,11 +1934,7 @@ class App(QtWidgets.QWidget):
                 ),
             )
 
-        duration_label = (
-            f"{minutes // 1440} days"
-            if minutes % 1440 == 0
-            else f"{minutes} minutes"
-        )
+        duration_label = f"{minutes // 1440} days" if minutes % 1440 == 0 else f"{minutes} minutes"
         self._run_async(f"Fetching Incoming Messages Journal for {duration_label}...", work)
 
     def run_get_outgoing_msgs_journal(self):
@@ -1965,11 +1961,7 @@ class App(QtWidgets.QWidget):
                 ),
             )
 
-        duration_label = (
-            f"{minutes // 1440} days"
-            if minutes % 1440 == 0
-            else f"{minutes} minutes"
-        )
+        duration_label = f"{minutes // 1440} days" if minutes % 1440 == 0 else f"{minutes} minutes"
         self._run_async(f"Fetching Outgoing Messages Journal for {duration_label}...", work)
 
     def run_get_chat_history(self):
