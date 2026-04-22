@@ -53,8 +53,8 @@ VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 Section "Install" SecInstall
   SetOutPath "$INSTDIR"
   
-  ; Copy the application folder (onedir build)
-  File /r "dist\greenapi-helper\*.*"
+  ; Copy the single-file executable
+  File "dist\greenapi-helper.exe"
   
   ; Create start menu shortcuts
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"

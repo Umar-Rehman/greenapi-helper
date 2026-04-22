@@ -113,14 +113,10 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    - name: Create folder-based executable with PyInstaller
+    - name: Build executable with PyInstaller
       run: |
         python update_version_info.py
         pyinstaller greenapi-helper.spec
-
-    - name: Create single-file executable with PyInstaller
-      run: |
-        pyinstaller --onefile --noconsole --icon ui/greenapiicon.ico --version-file version_info.txt --add-data "ui;ui" --add-data "version.json;." --name greenapi-helper app/main.py
 
     - name: Ensure greenapi-helper.exe is present for release
       run: |
@@ -147,9 +143,9 @@ jobs:
         & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
         Move-Item "dist\greenapi-helper-setup.exe" "dist\greenapi-helper-installer.exe"
 
-    - name: Create helper ZIP archive
+    - name: Create executable ZIP archive
       run: |
-        Compress-Archive -Path "dist\greenapi-helper\*" -DestinationPath "dist\greenapi-helper.zip"
+        Compress-Archive -Path "dist\greenapi-helper.exe" -DestinationPath "dist\greenapi-helper.zip"
 
     - name: Create installer ZIP archive
       run: |
@@ -164,7 +160,6 @@ jobs:
           dist/greenapi-helper-installer.exe
           dist/greenapi-helper-installer.zip
           dist/greenapi-helper.zip
-          dist/greenapi-helper/
 
   release:
     runs-on: windows-latest
