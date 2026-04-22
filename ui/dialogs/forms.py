@@ -264,6 +264,85 @@ def ask_minutes(parent: QWidget, *, minutes_default: int = 1440):
     return v["value"] * 1440 if v["unit"] == "days" else v["value"]
 
 
+def ask_partner_stale_instances(parent: QWidget, *, partner_token_default: str = "", weeks_default: int = 4):
+    def _validator(values: dict[str, Any]) -> str | None:
+        if not values.get("partnerToken"):
+            return "Partner token is required."
+        if values["amount"] < 1:
+            return "Time amount must be at least 1."
+        if values["unit"] == "weeks" and values["amount"] > 52:
+            return "Weeks cannot exceed 52."
+        if values["unit"] == "days" and values["amount"] > 365:
+            return "Days cannot exceed 365."
+        return None
+
+    dlg = FormDialog(
+        "Partner Stale Instances",
+        fields=[
+            TextField(
+                key="partnerToken",
+                label="Partner token:",
+                default=partner_token_default,
+                placeholder="Enter partner token",
+                required=True,
+                min_width=420,
+            ),
+            IntField(
+                key="amount",
+                label="Stale threshold:",
+                default=weeks_default,
+                min_value=1,
+                max_value=365,
+                step=1,
+            ),
+            ChoiceField(
+                key="unit",
+                label="Time unit:",
+                options=[
+                    ("weeks", "Weeks"),
+                    ("days", "Days"),
+                ],
+                default="weeks",
+            ),
+        ],
+        parent=parent,
+        first_focus_key="partnerToken",
+        validator=_validator,
+    )
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    values = dlg.values()
+    return values["partnerToken"], values["amount"], values["unit"]
+
+
+def ask_partner_token(parent: QWidget, *, partner_token_default: str = ""):
+    def _validator(values: dict[str, Any]) -> str | None:
+        if not values.get("partnerToken"):
+            return "Partner token is required."
+        return None
+
+    dlg = FormDialog(
+        "Partner Instances",
+        fields=[
+            TextField(
+                key="partnerToken",
+                label="Partner token:",
+                default=partner_token_default,
+                placeholder="Enter partner token",
+                required=True,
+                min_width=420,
+            ),
+        ],
+        parent=parent,
+        first_focus_key="partnerToken",
+        validator=_validator,
+    )
+    if dlg.exec() != QDialog.Accepted:
+        return None
+    values = dlg.values()
+    return values["partnerToken"]
+
+
 def ask_get_message(parent: QWidget, *, chat_id_default: str = ""):
     dlg = FormDialog(
         "Get Message",

@@ -170,6 +170,27 @@ TAB_CONFIG = {
             },
         ],
     },
+    "Partner": {
+        "sections": [
+            {
+                "title": "Partner Instances",
+                "buttons": [
+                    {
+                        "text": "View Unauthorized Instances",
+                        "handler": "run_view_unauthorized_partner_instances",
+                    },
+                    {
+                        "text": "View Authorized Instances",
+                        "handler": "run_view_authorized_partner_instances",
+                    },
+                    {
+                        "text": "View Stale Partner Instances",
+                        "handler": "run_view_stale_partner_instances",
+                    },
+                ],
+            },
+        ],
+    },
     "Sending": {
         "sections": [
             {
