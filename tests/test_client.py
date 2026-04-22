@@ -10,7 +10,7 @@ class TestClient:
         url = client._build_url("https://api.example.com", "12345", "test")
         assert url == "https://api.example.com/waInstance12345/test"
 
-    @patch("greenapi.client.requests.request")
+    @patch("greenapi.client.SESSION.request")
     def test_send_request_success(self, mock_request):
         """Test successful request sending."""
         mock_response = MagicMock()
@@ -21,7 +21,7 @@ class TestClient:
         result = client.send_request("GET", "https://example.com")
         assert result == '{"success": true}'
 
-    @patch("greenapi.client.requests.request")
+    @patch("greenapi.client.SESSION.request")
     def test_send_request_error(self, mock_request):
         """Test request error handling."""
         mock_response = MagicMock()

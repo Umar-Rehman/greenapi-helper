@@ -32,7 +32,7 @@ class TestClientComplete:
         """Test send_request handles cert tuple with None key."""
         from greenapi.client import send_request
 
-        with patch("greenapi.client.requests.request") as mock_req:
+        with patch("greenapi.client.SESSION.request") as mock_req:
             mock_resp = Mock()
             mock_resp.status_code = 200
             mock_resp.text = "success"
@@ -56,7 +56,7 @@ class TestClientComplete:
         from greenapi.client import send_request
         import requests
 
-        with patch("greenapi.client.requests.request") as mock_req:
+        with patch("greenapi.client.SESSION.request") as mock_req:
             mock_req.side_effect = requests.exceptions.SSLError("Certificate verify failed")
 
             result = send_request("GET", "https://api.test.com/endpoint", use_cert=True)
@@ -68,7 +68,7 @@ class TestClientComplete:
         """Test send_request handles general exceptions."""
         from greenapi.client import send_request
 
-        with patch("greenapi.client.requests.request") as mock_req:
+        with patch("greenapi.client.SESSION.request") as mock_req:
             mock_req.side_effect = ValueError("Unexpected error")
 
             result = send_request("GET", "https://api.test.com/endpoint")
@@ -80,7 +80,7 @@ class TestClientComplete:
         """Test send_request handles non-200 HTTP responses."""
         from greenapi.client import send_request
 
-        with patch("greenapi.client.requests.request") as mock_req:
+        with patch("greenapi.client.SESSION.request") as mock_req:
             mock_resp = Mock()
             mock_resp.status_code = 404
             mock_resp.text = "Not Found"

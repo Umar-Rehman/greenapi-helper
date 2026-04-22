@@ -1,5 +1,6 @@
 import re
 import requests
+from requests.adapters import HTTPAdapter
 import os
 import json
 import platform
@@ -22,6 +23,9 @@ KIBANA_URL = os.getenv("KIBANA_URL", "https://elk.prod.greenapi.org")
 SEARCH_SIZE = int(os.getenv("SEARCH_SIZE", "50"))
 TIME_GTE = os.getenv("TIME_GTE", "now-7d")
 KIBANA_AUTH_PATHS = ["/internal/security/me", "/api/security/v1/me", "/api/status"]
+
+SESSION = requests.Session()
+SESSION.mount("https://", HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=0))
 
 # Helper functions
 
@@ -644,7 +648,6 @@ def get_api_token(
                 "Cookie": cookie,
                 "Content-Type": "application/json",
             },
-            cert=cert,
             verify=True,
             timeout=60,
         )
@@ -669,6 +672,145 @@ def get_api_token(
         return f"Request Error: {str(e)}"
     except Exception as e:
         return f"Error: {str(e)}"
+
+
+def _proxy_search_powershell(
+    body: dict,
+    cookie: str,
+    cert_files: Optional[Tuple[str, str]],
+) -> dict:
+    """Fallback to PowerShell for Kibana proxy searches when requests cert auth fails."""
+    if platform.system() != "Windows":
+        return {"error": "PowerShell fallback is only supported on Windows."}
+
+    thumbprint = _get_thumbprint_from_cert_files(cert_files)
+    if not thumbprint:
+        return {"error": "PowerShell fallback requires a certificate thumbprint from the Windows store."}
+
+    script = f"""
+$ErrorActionPreference = 'Stop'
+$thumb = '{thumbprint}'
+$cert = Get-Item -Path ('Cert:\\CurrentUser\\My\\' + $thumb) -ErrorAction Stop
+$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+$headers = @{{ 'kbn-xsrf' = 'true'; 'Content-Type' = 'application/json' }}
+
+$cookiePairs = $env:KIBANA_COOKIE -split '; '
+foreach ($pair in $cookiePairs) {{
+    if ($pair -match '^(.+?)=(.+)$') {{
+        $name = $Matches[1]
+        $value = $Matches[2]
+        $cookie = New-Object System.Net.Cookie($name, $value, '/', 'elk.prod.greenapi.org')
+        $session.Cookies.Add($cookie)
+    }}
+}}
+
+$uri = '{KIBANA_URL}/api/console/proxy?path=logs-*,filebeat-*/_search&method=GET'
+$body = @'
+{json.dumps(body)}
+'@
+$resp = Invoke-WebRequest -Uri $uri -Method POST -Body $body -Headers $headers `
+    -Certificate $cert -WebSession $session -UseBasicParsing -TimeoutSec 60
+$resp.Content
+"""
+
+    env = os.environ.copy()
+    env["KIBANA_COOKIE"] = cookie
+
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        capture_output=True,
+        text=True,
+        timeout=70,
+        env=env,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "").strip()
+        return {"error": f"PowerShell proxy request failed: {err}"}
+
+    content = (result.stdout or "").strip()
+    if not content:
+        return {"error": "PowerShell proxy request failed: empty response."}
+
+    try:
+        return json.loads(content)
+    except Exception as e:
+        return {"error": f"PowerShell proxy response parse failed: {e}"}
+
+
+def search_logout_events(
+    instance_id: str,
+    kibana_cookie: Optional[str] = None,
+    cert_files: Optional[Tuple[str, str]] = None,
+    amount: int = 4,
+    unit: str = "weeks",
+) -> dict:
+    """Search Kibana logs for logout events for a given instance within the last X days/weeks."""
+    proxy_url = f"{KIBANA_URL}/api/console/proxy"
+
+    cookie = kibana_cookie or os.getenv("KIBANA_COOKIE")
+    if not cookie:
+        return {"error": "Kibana cookie not provided. Please authenticate."}
+
+    cert = cert_files or ("client.crt", "client.key")
+    if isinstance(cert, tuple) and len(cert) > 1 and not cert[1]:
+        cert = cert[0]
+
+    body = {
+        "size": 1,
+        "sort": [{"@timestamp": {"order": "desc"}}],
+        "query": {
+            "bool": {
+                "must": [],
+                "filter": [
+                    {"range": {"@timestamp": {"gte": f"now-{amount}{unit[0]}"}}},
+                    {"match_phrase": {"message": instance_id}},
+                    {"match_phrase": {"message": "log out by user"}},
+                ],
+                "should": [],
+                "must_not": [],
+            }
+        },
+        "_source": ["@timestamp", "message", "uri"],
+    }
+
+    if platform.system() == "Windows" and not isinstance(cert, tuple):
+        power_shell_search = _proxy_search_powershell(body, cookie, cert_files)
+        if "error" not in power_shell_search:
+            return power_shell_search
+        return power_shell_search
+
+    try:
+        resp = SESSION.post(
+            proxy_url,
+            params={"path": "logs-*,filebeat-*/_search", "method": "GET"},
+            json=body,
+            headers={
+                "kbn-xsrf": "true",
+                "Cookie": cookie,
+                "Content-Type": "application/json",
+            },
+            verify=True,
+            timeout=60,
+        )
+
+        if resp.status_code != 200:
+            return {"error": f"HTTP {resp.status_code}: {resp.text}"}
+
+        return resp.json()
+
+    except requests.exceptions.SSLError as e:
+        if platform.system() == "Windows":
+            power_shell_search = _proxy_search_powershell(body, cookie, cert_files)
+            if "error" not in power_shell_search:
+                return power_shell_search
+            return power_shell_search
+        return {"error": f"SSL Certificate Error: {str(e)}\nPlease check your client certificate."}
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Request Error: {str(e)}"}
+    except Exception as e:
+        return {"error": f"Error: {str(e)}"}
 
 
 def _get_api_token_powershell(

@@ -1,4 +1,5 @@
 import requests
+from requests.adapters import HTTPAdapter
 from functools import lru_cache
 from typing import Optional, Tuple
 
@@ -6,6 +7,10 @@ from typing import Optional, Tuple
 
 VERIFY_TLS = True
 TIMEOUT_SECONDS = 60
+
+SESSION = requests.Session()
+SESSION.mount("https://", HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=0))
+SESSION.headers.update({"accept": "application/json"})
 
 # Certificate files for fallback (if not using credential manager)
 _fallback_cert_files: Optional[Tuple[str, str]] = None
@@ -145,7 +150,7 @@ def send_request(
             cert = cert[0]
 
     try:
-        resp = requests.request(
+        resp = SESSION.request(
             method=method.upper(),
             url=url,
             headers={"accept": "application/json"},

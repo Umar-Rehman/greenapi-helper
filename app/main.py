@@ -3,6 +3,7 @@ import json
 import traceback
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from PySide6 import QtGui, QtCore, QtWidgets
 from app.resources import resource_path
@@ -12,10 +13,15 @@ from ui.dialogs import forms, instance_settings, qr
 from ui.dialogs.cert_selector import CertificateSelectorDialog
 from ui.dialogs.kibana_login import KibanaLoginDialog
 from ui.dialogs.app_settings import AppSettingsDialog
-from greenapi.elk_auth import get_api_token, get_kibana_session_cookie_with_password
+from greenapi.elk_auth import (
+    get_api_token,
+    get_kibana_session_cookie_with_password,
+    search_logout_events,
+)
 from greenapi.api_url_resolver import resolve_api_url
 from greenapi.credentials import get_credential_manager
 import greenapi.client as ga
+import requests
 
 
 class Worker(QtCore.QObject):
@@ -1625,6 +1631,338 @@ class App(QtWidgets.QWidget):
         if not ctx.get("api_url"):
             return {"ctx": ctx, "error": "Failed to resolve apiUrl"}
         return {"ctx": ctx, "result": call_fn(ctx["api_url"], token)}
+
+    def _fetch_partner_instances(self, partner_token: str) -> dict:
+        """Fetch instances for a given partner token from the partner API."""
+        try:
+            url = f"https://api.green-api.com/partner/getInstances/{partner_token}"
+            response = requests.get(url, timeout=30)
+            try:
+                data = response.json()
+            except ValueError:
+                return {"result": False, "error": "Partner response is not valid JSON."}
+
+            if not response.ok or not isinstance(data, list):
+                return {
+                    "result": False,
+                    "error": f"Partner lookup failed. HTTP {response.status_code}: {data}",
+                }
+
+            return {"result": True, "data": data}
+        except requests.RequestException as exc:
+            return {"result": False, "error": str(exc)}
+
+    def _get_instance_state_for_partner(self, instance_id: str, api_token: str) -> str:
+        """Return the Green API state for a partner instance using the provided token."""
+        try:
+            api_url = resolve_api_url(instance_id)
+            print(f"[partner-state] fetching state for {instance_id} via {api_url}")
+            result = ga.get_instance_state(api_url, instance_id, api_token)
+            try:
+                data = json.loads(result)
+                state = data.get("stateInstance") or data.get("state")
+                print(f"[partner-state] {instance_id} raw state response={result}")
+                if isinstance(state, str):
+                    print(f"[partner-state] {instance_id} parsed state={state}")
+                    return state
+            except ValueError:
+                print(f"[partner-state] {instance_id} response not JSON: {result}")
+            return result
+        except Exception as exc:
+            print(f"[partner-state] {instance_id} exception: {type(exc).__name__}: {exc}")
+            return "error"
+
+    def _find_unauthorized_partner_instances(self, partner_token: str) -> str:
+        """Worker method to find all unauthorized partner instances."""
+        print(f"[partner-unauth] start unauthorized check for partner_token={partner_token[:8]}...")
+        partner_result = self._fetch_partner_instances(partner_token)
+        if not partner_result.get("result"):
+            print(f"[partner-unauth] fetch failed: {partner_result.get('error')}")
+            return f"Error: {partner_result.get('error', 'Failed to fetch partner instances.')}"
+
+        instances = partner_result.get("data", [])
+        print(f"[partner-unauth] fetched {len(instances)} partner instances")
+        if not instances:
+            return "No partner instances were found for that token."
+
+        valid_instances = []
+        for element in instances:
+            instance_id = str(element.get("idInstance", "")).strip()
+            api_token = element.get("apiTokenInstance") or element.get("apiToken") or ""
+            instance_name = element.get("name") or "<no name>"
+
+            if not instance_id or not api_token:
+                print(f"[partner-unauth] skipping invalid instance entry: id={instance_id!r}")
+                continue
+
+            valid_instances.append((instance_name, instance_id, api_token))
+
+        if not valid_instances:
+            return "No unauthorized partner instances found."
+
+        unauthorized_instances = []
+        worker_count = min(8, len(valid_instances))
+        print(f"[partner-unauth] checking {len(valid_instances)} instances with {worker_count} workers")
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_entry = {
+                executor.submit(self._get_instance_state_for_partner, instance_id, api_token): (
+                    instance_name,
+                    instance_id,
+                )
+                for instance_name, instance_id, api_token in valid_instances
+            }
+            for future in as_completed(future_to_entry):
+                instance_name, instance_id = future_to_entry[future]
+                state = future.result()
+                print(f"[partner-unauth] instance {instance_id} returned state={state!r}")
+                if isinstance(state, str) and state.startswith("notAuthorized"):
+                    print(f"[partner-unauth] instance {instance_id} is notAuthorized")
+                    unauthorized_instances.append((instance_name, instance_id))
+
+        print(f"[partner-unauth] unauthorized count={len(unauthorized_instances)}")
+        if not unauthorized_instances:
+            return "No unauthorized partner instances found."
+
+        lines = [
+            "Unauthorized partner instances:",
+            "",
+        ]
+        for name, instance_id in unauthorized_instances:
+            lines.append(f"- {name} ({instance_id})")
+        print(
+            "[partner-unauth] unauthorized list:\n"
+            + "\n".join([f"- {name} ({instance_id})" for name, instance_id in unauthorized_instances])
+        )
+        return "\n".join(lines)
+
+    def _find_authorized_partner_instances(self, partner_token: str) -> str:
+        """Worker method to find all authorized partner instances."""
+        print(f"[partner-auth] start authorized check for partner_token={partner_token[:8]}...")
+        partner_result = self._fetch_partner_instances(partner_token)
+        if not partner_result.get("result"):
+            print(f"[partner-auth] fetch failed: {partner_result.get('error')}")
+            return f"Error: {partner_result.get('error', 'Failed to fetch partner instances.')}"
+
+        instances = partner_result.get("data", [])
+        print(f"[partner-auth] fetched {len(instances)} partner instances")
+        if not instances:
+            return "No partner instances were found for that token."
+
+        valid_instances = []
+        for element in instances:
+            instance_id = str(element.get("idInstance", "")).strip()
+            api_token = element.get("apiTokenInstance") or element.get("apiToken") or ""
+            instance_name = element.get("name") or "<no name>"
+
+            if not instance_id or not api_token:
+                print(f"[partner-auth] skipping invalid instance entry: id={instance_id!r}")
+                continue
+
+            valid_instances.append((instance_name, instance_id, api_token))
+
+        if not valid_instances:
+            return "No authorized partner instances found."
+
+        authorized_instances = []
+        worker_count = min(8, len(valid_instances))
+        print(f"[partner-auth] checking {len(valid_instances)} instances with {worker_count} workers")
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_entry = {
+                executor.submit(self._get_instance_state_for_partner, instance_id, api_token): (
+                    instance_name,
+                    instance_id,
+                )
+                for instance_name, instance_id, api_token in valid_instances
+            }
+            for future in as_completed(future_to_entry):
+                instance_name, instance_id = future_to_entry[future]
+                state = future.result()
+                print(f"[partner-auth] instance {instance_id} returned state={state!r}")
+                if isinstance(state, str) and not state.startswith("notAuthorized"):
+                    print(f"[partner-auth] instance {instance_id} is authorized")
+                    authorized_instances.append((instance_name, instance_id))
+
+        print(f"[partner-auth] authorized count={len(authorized_instances)}")
+        if not authorized_instances:
+            return "No authorized partner instances found."
+
+        lines = [
+            "Authorized partner instances:",
+            "",
+        ]
+        for name, instance_id in authorized_instances:
+            lines.append(f"- {name} ({instance_id})")
+        print(
+            "[partner-auth] authorized list:\n"
+            + "\n".join([f"- {name} ({instance_id})" for name, instance_id in authorized_instances])
+        )
+        return "\n".join(lines)
+
+    def _find_stale_partner_instances(self, partner_token: str, amount: int, unit: str) -> str:
+        """Worker method to find stale partner instances based on Kibana logout events."""
+        print(
+            f"[partner-stale] start stale check for partner_token={partner_token[:8]}..., amount={amount}, unit={unit}"
+        )
+        partner_result = self._fetch_partner_instances(partner_token)
+        if not partner_result.get("result"):
+            print(f"[partner-stale] fetch failed: {partner_result.get('error')}")
+            return f"Error: {partner_result.get('error', 'Failed to fetch partner instances.')}"
+
+        instances = partner_result.get("data", [])
+        print(f"[partner-stale] fetched {len(instances)} partner instances")
+        if not instances:
+            return "No partner instances were found for that token."
+
+        # First, collect all unauthorized instances
+        valid_instances = []
+        for element in instances:
+            instance_id = str(element.get("idInstance", "")).strip()
+            api_token = element.get("apiTokenInstance") or element.get("apiToken") or ""
+            instance_name = element.get("name") or "<no name>"
+
+            if not instance_id or not api_token:
+                print(f"[partner-stale] skipping invalid instance entry: id={instance_id!r}")
+                continue
+
+            valid_instances.append((instance_name, instance_id, api_token))
+
+        if not valid_instances:
+            return "No unauthorized partner instances found."
+
+        unauthorized_instances = []
+        worker_count = min(8, len(valid_instances))
+        print(f"[partner-stale] checking {len(valid_instances)} instances with {worker_count} workers")
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_entry = {
+                executor.submit(self._get_instance_state_for_partner, instance_id, api_token): (
+                    instance_name,
+                    instance_id,
+                    api_token,
+                )
+                for instance_name, instance_id, api_token in valid_instances
+            }
+            for future in as_completed(future_to_entry):
+                instance_name, instance_id, api_token = future_to_entry[future]
+                state = future.result()
+                print(f"[partner-stale] instance {instance_id} state={state!r}")
+                if isinstance(state, str) and state.startswith("notAuthorized"):
+                    unauthorized_instances.append((instance_name, instance_id, api_token))
+
+        print(f"[partner-stale] unauthorized list count={len(unauthorized_instances)}")
+        if not unauthorized_instances:
+            return "No unauthorized partner instances found."
+
+        print("[partner-stale] unauthorized instances to scan for logout events:")
+        for name, instance_id, _ in unauthorized_instances:
+            print(f"  - {name} ({instance_id})")
+
+        # Now, check Kibana logs only for unauthorized instances
+        cred_mgr = get_credential_manager()
+        kibana_cookie = cred_mgr.get_kibana_cookie()
+        cert_files = cred_mgr.get_certificate_files()
+
+        stale_instances = []
+        worker_count = min(6, len(unauthorized_instances))
+        print(
+            "[partner-stale] searching logs for "
+            f"{len(unauthorized_instances)} unauthorized instances "
+            f"with {worker_count} workers"
+        )
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_entry = {
+                executor.submit(
+                    search_logout_events,
+                    instance_id,
+                    kibana_cookie=kibana_cookie,
+                    cert_files=cert_files,
+                    amount=amount,
+                    unit=unit,
+                ): (name, instance_id)
+                for name, instance_id, _ in unauthorized_instances
+            }
+            for future in as_completed(future_to_entry):
+                name, instance_id = future_to_entry[future]
+                search_result = future.result()
+
+                if search_result.get("error"):
+                    print(f"[partner-stale] Kibana search failed for {instance_id}: {search_result['error']}")
+                    return f"Error: Kibana search failed for {instance_id}: {search_result['error']}"
+
+                hits = search_result.get("hits", {}).get("hits", [])
+                print(f"[partner-stale] {instance_id} logout hits={len(hits)}")
+                if not hits:
+                    print(f"[partner-stale] {instance_id} is stale")
+                    stale_instances.append((name, instance_id))
+
+        if not stale_instances:
+            print("[partner-stale] no stale unauthorized partner instances found")
+            return f"No stale unauthorized partner instances found in the last {amount} {unit}."
+
+        lines = [
+            f"Stale unauthorized partner instances (no logout found in last {amount} {unit}):",
+            "",
+        ]
+        for name, instance_id in stale_instances:
+            lines.append(f"- {name} ({instance_id})")
+        print(
+            "[partner-stale] stale instances found:\n"
+            + "\n".join([f"- {name} ({instance_id})" for name, instance_id in stale_instances])
+        )
+        return "\n".join(lines)
+
+    def run_view_unauthorized_partner_instances(self):
+        user_input = forms.ask_partner_token(self)
+        if not user_input:
+            return
+
+        partner_token = user_input
+        if not partner_token:
+            self._set_output("Partner token is required.")
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        def work():
+            return self._find_unauthorized_partner_instances(partner_token)
+
+        self._run_async("Finding unauthorized partner instances...", work)
+
+    def run_view_stale_partner_instances(self):
+        user_input = forms.ask_partner_stale_instances(self)
+        if not user_input:
+            return
+
+        partner_token, amount, unit = user_input
+        if not partner_token:
+            self._set_output("Partner token is required.")
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        def work():
+            return self._find_stale_partner_instances(partner_token, amount, unit)
+
+        self._run_async("Finding stale partner instances...", work)
+
+    def run_view_authorized_partner_instances(self):
+        user_input = forms.ask_partner_token(self)
+        if not user_input:
+            return
+
+        partner_token = user_input
+        if not partner_token:
+            self._set_output("Partner token is required.")
+            return
+
+        if not self._ensure_authentication():
+            return
+
+        def work():
+            return self._find_authorized_partner_instances(partner_token)
+
+        self._run_async("Finding authorized partner instances...", work)
 
     # API Methods
 
