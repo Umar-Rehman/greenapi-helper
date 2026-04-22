@@ -19,7 +19,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    [],
+    a.binaries,
+    a.datas,
     [],
     name='greenapi-helper',
     debug=False,
@@ -36,15 +37,4 @@ exe = EXE(
     entitlements_file=None,
     version='version_info.txt',
     icon='ui\\greenapiicon.ico',
-    exclude_binaries=True,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name='greenapi-helper',
 )
