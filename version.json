@@ -1,8 +1,8 @@
 {
-  "version": "1.9.11",
-  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.9.11/greenapi-helper.exe",
+  "version": "1.9.12",
+  "download_url": "https://github.com/Umar-Rehman/greenapi-helper/releases/download/v1.9.12/greenapi-helper.exe",
   "changelog_url": "https://github.com/Umar-Rehman/greenapi-helper/releases",
   "minimum_version": "1.7.0",
-  "release_date": "2026-04-09",
+  "release_date": "2026-04-22",
   "notes": "The Helper is a work in progress. You may find bugs or areas for improvements. Reach out to me to bring these to my attention so I can patch or implement as soon as possible."
 }
