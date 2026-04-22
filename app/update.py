@@ -6,6 +6,8 @@ Simplified version without excessive logging.
 import json
 import os
 import sys
+import ssl
+import time
 import tempfile
 import subprocess
 import urllib.request
@@ -145,47 +147,98 @@ class UpdateManager(QtCore.QObject):
 
         except Exception as e:
             _log_error(f"Self-update failed: {type(e).__name__}: {str(e)}")
-            QtWidgets.QMessageBox.critical(parent_widget, "Update Failed", f"Failed to perform update: {str(e)}")
+            error_text = str(e)
+            if "10054" in error_text or "forcibly closed" in error_text.lower():
+                error_message = (
+                    "Failed to download update: Connection to GitHub was interrupted.\n\n"
+                    "This might be due to:\n"
+                    "- Network connectivity issues\n"
+                    "- Firewall or antivirus blocking the connection\n"
+                    "- GitHub server issues\n\n"
+                    "Please try again later or download manually from:\n"
+                    "https://github.com/Umar-Rehman/greenapi-helper/releases"
+                )
+            else:
+                error_message = f"Failed to perform update: {error_text}"
+            QtWidgets.QMessageBox.critical(parent_widget, "Update Failed", error_message)
             return False
 
     def _download_update(self, download_url: str, progress: QtWidgets.QProgressDialog) -> Optional[str]:
-        """Download the update executable with progress feedback."""
-        try:
-            temp_fd, temp_path = tempfile.mkstemp(suffix=".exe")
-            os.close(temp_fd)
+        """Download the update executable with progress feedback and retry logic."""
+        max_retries = 3
+        retry_delay = 2  # seconds
 
-            with urllib.request.urlopen(download_url, timeout=30) as response:
-                total_size = int(response.headers.get("content-length", 0))
-                downloaded = 0
+        for attempt in range(max_retries):
+            try:
+                temp_fd, temp_path = tempfile.mkstemp(suffix=".exe")
+                os.close(temp_fd)
 
-                with open(temp_path, "wb") as f:
-                    while True:
-                        if progress.wasCanceled():
-                            os.unlink(temp_path)
-                            return None
+                # Create SSL context to handle certificate issues
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = True
+                ssl_context.verify_mode = ssl.CERT_REQUIRED
 
-                        chunk = response.read(8192)
-                        if not chunk:
-                            break
+                req = urllib.request.Request(download_url)
+                req.add_header("User-Agent", "greenapi-helper/1.9.12")
 
-                        f.write(chunk)
-                        downloaded += len(chunk)
+                # Use longer timeout and SSL context
+                with urllib.request.urlopen(req, timeout=60, context=ssl_context) as response:
+                    total_size = int(response.headers.get("content-length", 0))
+                    downloaded = 0
 
-                        if total_size > 0:
-                            percent = int((downloaded / total_size) * 75) + 10
-                            mb_downloaded = downloaded / (1024 * 1024)
-                            mb_total = total_size / (1024 * 1024)
-                            progress.setLabelText(f"Downloading update... {mb_downloaded:.1f} MB / {mb_total:.1f} MB")
-                            progress.setValue(percent)
+                    with open(temp_path, "wb") as f:
+                        while True:
+                            if progress.wasCanceled():
+                                os.unlink(temp_path)
+                                return None
 
-            progress.setLabelText("Download complete, verifying...")
-            progress.setValue(85)
-            return temp_path
+                            # Read with smaller chunk size for better progress updates
+                            chunk = response.read(4096)
+                            if not chunk:
+                                break
 
-        except Exception as e:
-            _log_error(f"Download failed: {type(e).__name__}: {str(e)}")
-            progress.close()
-            raise
+                            f.write(chunk)
+                            downloaded += len(chunk)
+
+                            if total_size > 0:
+                                percent = int((downloaded / total_size) * 75) + 10
+                                mb_downloaded = downloaded / (1024 * 1024)
+                                mb_total = total_size / (1024 * 1024)
+                                msg = f"Downloading update... {mb_downloaded:.1f} MB / {mb_total:.1f} MB"
+                                progress.setLabelText(msg)
+                                progress.setValue(percent)
+
+                progress.setLabelText("Download complete, verifying...")
+                progress.setValue(85)
+                return temp_path
+
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                # Clean up partial file
+                try:
+                    if "temp_path" in locals() and os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                except (OSError, NameError):
+                    pass
+
+                error_msg = f"{type(e).__name__}: {str(e)}"
+
+                # Check if this is the last attempt
+                if attempt < max_retries - 1:
+                    msg = (
+                        f"Download failed (attempt {attempt + 1}/{max_retries}): {error_msg}. "
+                        f"Retrying in {retry_delay} seconds..."
+                    )
+                    _log_error(msg)
+                    msg = f"Download interrupted, retrying... (attempt {attempt + 2}/{max_retries})"
+                    progress.setLabelText(msg)
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    _log_error(f"Download failed after {max_retries} attempts: {error_msg}")
+                    progress.close()
+                    raise
+
+        return None
 
     def _create_updater_script(self, new_exe_path: str) -> Optional[str]:
         """Create a batch script to replace the current executable and restart."""
